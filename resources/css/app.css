@@ -1,0 +1,34 @@
+@import 'tailwindcss';
+
+@source '../../vendor/laravel/framework/src/Illuminate/Pagination/resources/views/*.blade.php';
+@source '../../storage/framework/views/*.php';
+@source '../**/*.blade.php';
+@source '../**/*.js';
+@source '../../vendor/robsontenorio/mary/src/View/Components/**/*.php';
+
+@plugin "daisyui" {
+    themes: light, dark --default;
+}
+
+@theme {
+    --font-sans: 'Segoe UI', ui-sans-serif, system-ui, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji',
+        'Segoe UI Symbol', 'Noto Color Emoji';
+}
+
+@layer base {
+    [x-cloak] { display: none !important; }
+    body { @apply min-h-screen bg-base-200 text-base-content antialiased; }
+    button, a, input, select { @apply focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-primary; }
+}
+
+@layer components {
+    .panel { @apply rounded-2xl border border-base-content/10 bg-base-100 p-5 md:p-6; }
+    .eyebrow { @apply text-xs font-bold uppercase tracking-widest text-primary; }
+    .page-title { @apply text-3xl font-bold tracking-tight; }
+    .muted { @apply text-sm text-base-content/60; }
+    .field { @apply flex flex-col gap-2 text-sm font-medium; }
+    .nav-link { @apply flex items-center gap-3 rounded-xl px-4 py-3 text-sm text-base-content/70 transition-colors hover:bg-base-content/5 hover:text-base-content; }
+    .nav-link.active { @apply bg-primary/10 font-semibold text-primary; }
+    .table-wrap { @apply overflow-x-auto; }
+    .table th { @apply text-xs uppercase tracking-wider text-base-content/50; }
+}
