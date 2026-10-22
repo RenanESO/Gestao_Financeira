@@ -19,7 +19,7 @@
 9. [Sistema de Notificações](#9-sistema-de-notificações)
 10. [Gerador de Recibos PDF](#10-gerador-de-recibos-pdf)
 11. [Importação e Exportação de Planilhas](#11-importação-e-exportação-de-planilhas)
-12. [Dashboard — Gráficos e KPIs](#12-dashboard--gráficos-e-kpis)
+12. [Dashboard — Gráficos, KPIs e Relatório](#12-dashboard--gráficos-kpis-e-relatório)
 13. [Segurança e Isolamento de Dados](#13-segurança-e-isolamento-de-dados)
 14. [Convenções de Código](#14-convenções-de-código)
 15. [Fluxo de Trabalho Git](#15-fluxo-de-trabalho-git)
@@ -44,12 +44,12 @@ O fluxo do zero (pré-requisitos, `.env`, migrations, `storage:link`, build de a
 - Livewire 3.8.10 e MaryUI 2.9 instalados em produção. Tailwind 4 e daisyUI 5 são a combinação atual compatível com MaryUI 2.9, substituindo o alvo anterior Tailwind 3. Vite 6.4.4/plugin Laravel Vite 1 funcionam com Node 20.13.1. Breeze 2.4 permanece somente em desenvolvimento; seu instalador não foi executado para evitar sobrescrever rotas/layouts.
 - Onze Models financeiros, relacionamentos, casts, soft deletes e isolamento por proprietário estão implementados, com `FinancialRecordPolicy`, `TitlePolicy` e `TitleSettlementPolicy`.
 - `TitleService`, `RecurrenceService` e `Money` implementam títulos/parcelas, baixas parciais/totais, idempotência, cancelamento, edição controlada e recorrência.
-- `FinancialAccountService` calcula saldo; `CatalogService` cria/edita cadastros e arquiva/restaura contatos.
+- `FinancialAccountService` calcula saldo; `CatalogService` cria/edita cadastros e arquiva/restaura contatos. `UserPreferencesService` persiste tema e antecedência de alertas. `FinancialAnalyticsService` consolida baixas/estornos para a dashboard financeira e relatório.
 - `OverdueTitleService` e `titles:update-overdue` atualizam vencidos; agenda às 00:05 com prevenção de sobreposição.
 - `FinancialDefaultsService`, `finance:initialize`, `CategorySeeder` e `PaymentTypeSeeder` criam cadastros ausentes. `DatabaseSeeder` não cria usuários de exemplo.
 - `SettlementReversalService` estorna integralmente baixas com auditoria, recalcula principal/estados e invalida recibos existentes. Ciclos sem movimentos são cancelados; cadeias com histórico/legadas ambíguas são bloqueadas.
 - `ReceiptService` emite PDF privado com snapshot/hash, numeração global e download autorizado, em operação independente da baixa.
-- `NotificationService` e `notifications:send-due-soon` geram alertas internos deduplicados e controlam leitura; agenda às 08:00.
+- `NotificationService` e `notifications:send-due-soon` geram alertas internos deduplicados e controlam leitura; agenda às 08:00. A interface também permite atualização manual do próprio usuário.
 - DomPDF 3.1.2 / renderizador 3.1.6 instalados como dependência de produção. Autenticação/onboarding e primeiras telas implementados; alertas externos e operações financeiras completas na interface seguem pendentes. Runtime não foi alterado.
 - `APP_KEY` local foi gerada porque estava ausente; não foi rotacionada uma chave existente.
 
@@ -61,7 +61,7 @@ php vendor/bin/pint --test app/Models app/Policies app/Services app/Support app/
 php vendor/bin/phpunit --configuration phpunit.mysql.xml
 ```
 
-Resultado atual: **303 testes aprovados, 1297 assertions em SQLite** e
+Resultado atual: **324 testes aprovados, 1446 assertions em SQLite** e
 **158 testes aprovados, 1003 assertions na execução final em MySQL**.
 `UserPreferencesTest` cobre defaults, cast e proteção de credenciais;
 `FinancialSchemaTest` cobre persistência da cadeia financeira, enums, unicidade, vínculos,
@@ -118,11 +118,14 @@ Verificação de e-mail, MFA e gerenciamento de sessões/dispositivos ainda não
 | `/` | Apresentação e acesso ao login/registro |
 | `/entrar`, `/criar-conta`, `/sair` | Autenticação; logout somente POST |
 | `/esqueci-senha`, `/redefinir-senha/{token}` | Solicitação e redefinição com Password Broker |
-| `/painel` | Contagens de abertos/alertas, próximas seis parcelas e saldo de até seis contas |
+| `/painel` | Contagens, totais mensais aberto/realizado, próximas seis parcelas restantes e saldo de até seis contas |
+| `/dashboard-financeira` | Filtros, KPIs, gráficos e relatório imprimível de movimentos realizados |
 | `/cadastros/{module}` | `categorias`, `contatos`, `contas`, `formas` |
 | `/receitas`, `/despesas` | Títulos por tipo, criação simples/parcelada/recorrente, busca e filtro |
 | `/titulos/{title}` | Parcelas, principal restante, baixa/estorno, edição/cancelamento e emissão/download de PDF |
 | `/recibos`, `/notificacoes` | Consulta de documentos e alertas |
+| `/preferencias` | Tema persistente e antecedência de alertas |
+| POST `/notificacoes/atualizar` | Gera alertas do proprietário autenticado imediatamente |
 | POST `/notificacoes/{notification}/lida` | Leitura na interface, sem alterar a rota JSON anterior |
 | POST `/notificacoes/ler-todas` | Leitura em lote somente do proprietário autenticado |
 
@@ -145,12 +148,16 @@ menu recolhível e estados vazios. Alpine é fornecido pelo Livewire, sem segund
 instância manual. As views de `auth/` usam POST/CSRF; módulos usam views Blade e
 `resources/views/livewire/`. Não foi executado scaffolding Breeze/MaryUI.
 
-Cadastros de contatos nesta UI incluem nome, tipo, documento, e-mail e telefone;
-endereço/notas, arquivamento/restauração ainda serão integrados. `TitleDetail` já
-integra baixa, estorno, edição/cancelamento e PDF usando os Services, sem gravação
+Cadastros de contatos incluem nome, tipo, documento, e-mail, telefone, endereço,
+bairro, cidade, UF, CEP e observações. A lista permite arquivar e restaurar pelo
+`CatalogService`, sem exclusão física. `UserPreferences` usa `UserPreferencesService`
+para validar e persistir tema (`dark`/`light`) e antecedência de 0 a 365 dias.
+`TitleDetail` já integra baixa, estorno, edição/cancelamento e PDF usando os Services, sem gravação
 direta nos Models. Recorrência mensal/anual pode ser configurada na criação.
+Inclusão de títulos expõe também documento, referência e observações; categorias e contas
+expõem cor e ícone desde a criação, mantendo os campos equivalentes à edição.
 
-`WorkspaceTest` adiciona 19 testes SQLite: autenticação, throttling, recuperação,
+`WorkspaceTest` possui 23 testes SQLite: autenticação, throttling, recuperação,
 rollback de onboarding, páginas, cadastros, títulos, centavos, acesso cruzado,
 leitura e bloqueio de propriedades Livewire. Os testes HTTP/Livewire novos ainda
 não possuem suíte equivalente MySQL; a regressão do domínio MySQL foi mantida.
@@ -173,9 +180,13 @@ dependências ou novas rotas financeiras nesta etapa.
 
 - `record()`, `installment()` e `settlement()` recarregam IDs com `OwnerScope`;
   parcela e baixa devem pertencer ao título da rota, mesmo que sejam do mesmo usuário.
-- `openPayment()` gera UUID bloqueado e preenche principal restante pelas baixas ativas.
+- `openPayment()` exige conta ativa e forma ativa compatível antes de gerar UUID; então preenche principal restante pelas baixas ativas.
   `settle()` delega ao `TitleService`. Aceita até 20 formas, principal parcial/total,
   desconto/juros/multa e observações. Confirmação explícita antecede a gravação.
+- `paymentSummary()` é somente visual: calcula em centavos o total esperado
+  (`principal - desconto + juros + multa`), a soma das formas e a diferença. Campos
+  incompletos exibem orientação, sem permitir que a prévia substitua a validação final
+  do `TitleService`.
 - UUID, parcela, título e payload confirmado têm `#[Locked]`. Após sucesso, chave
   e payload permanecem para reenvio. Um formulário ainda aberto não pode receber
   nova chave silenciosamente; outro pedido exige concluir ou fechar o atual.
@@ -189,7 +200,11 @@ dependências ou novas rotas financeiras nesta etapa.
   ou emissão automática dentro de `settle()`. Reemissão verifica documento existente.
   Validação de integridade, arquivo ausente e erro de armazenamento aparecem na tela,
   sem desfazer baixa nem regenerar silenciosamente um arquivo inválido.
-- `openEdit()` guarda baseline bloqueado. Com qualquer histórico de baixa, só
+- `openEdit()` guarda baseline bloqueado. Sem histórico, expõe também recorrência:
+  pode ativar, alterar ou desativar a configuração mensal/anual. A normalização
+  limpa tipo/dia/mês ao desativar e limpa o mês na recorrência mensal. O Service
+  continua bloqueando recorrência em cadeia de ciclos já criada.
+  Com qualquer histórico de baixa, só
   expõe descrição/documento/referência/notas. Sem histórico, permite valor/datas/vínculos.
   `saveEdit()` envia somente diferenças, preservando vínculos inativos não alterados.
   O Service revalida concorrência: baixa após abertura bloqueia alteração financeira.
@@ -198,14 +213,13 @@ dependências ou novas rotas financeiras nesta etapa.
 
 O detalhe exibe principal original e restante (baixas ativas, excluindo estornos),
 formas/contas e ajustes por baixa, motivo/data de estorno, recibos e ciclos gerados.
-Os próximos compromissos do dashboard ainda exibem principal original, não restante.
-Valores são strings com ponto decimal; nenhum formulário calcula com float.
-Resumo interativo de total/formas permanece como refinamento futuro.
-
+`WorkspaceController` calcula valores do painel em centavos: parcelas abertas no mês
+usam principal restante; baixas realizadas entram pela data da baixa e estornos no
+mesmo período reduzem o total realizado. Os próximos compromissos mostram o saldo
+restante, não o valor original. Valores são strings com ponto decimal; nenhum formulário calcula com float.
 `Titles` normaliza recorrência desmarcada para campos nulos; mensal não usa mês.
 Recorrência marcada exige uma parcela e dia/mês compatíveis com o vencimento,
 validados pelo `TitleService`. O próximo ciclo nasce somente na baixa total.
-Edição da configuração de recorrência ainda não é exposta nesta UI.
 
 Pedidos e rascunhos não persistem após recarregar a página. Em falha de conexão,
 conferir histórico e reenviar o pedido original antes de iniciar outro; UUID novo
@@ -213,16 +227,18 @@ representa outra operação. Idempotência persistida no banco não deduplica pe
 com UUIDs diferentes. A baixa permite data futura pelo contrato existente; PDF
 aguarda a data da baixa e estorno rejeita data futura.
 
-`TitleDetailTest` adiciona 23 testes SQLite: reenvio de snapshot antigo por HTTP,
+`TitleDetailTest` possui 27 testes SQLite: reenvio de snapshot antigo por HTTP,
 hash divergente, múltiplas formas/ajustes, principal restante, PDF real, corrupção,
 ausência/armazenamento, estorno/replay, edição concorrente, cancelamento,
-recorrência e isolamento por dono/título. Usa `DatabaseMigrations` sem transação
+recorrência e isolamento por dono/título. Também cobre a prévia de total/formas,
+ativação/desativação de recorrência sem histórico e a rejeição dessa alteração depois
+de baixa. Usa `DatabaseMigrations` sem transação
 externa para PDF e disco temporário exclusivo. Antes do rollback de schema, desfaz
 autorreferências de fixtures somente após confirmar SQLite `:memory:`; não toca MySQL.
 Navegador desktop conferiu baixa parcial de R$ 40,00 sobre R$ 100,00, reenvio sem
 duplicação, PDF, estorno com invalidação, edição de metadados e cancelamento.
 Banco/PDFs de navegador ficaram em diretórios temporários fora do projeto.
-A regressão atual passou em SQLite e MySQL, mantendo as dez disputas reais.
+A validação da interface confirma mensagens antecipadas quando não há conta/forma ativa.
 Equivalentes MySQL dos novos testes HTTP/Livewire, mobile e acessibilidade pendentes.
 
 ### Testes de Integração MySQL
@@ -308,9 +324,9 @@ verificados (configuração, migrations e teste de estrutura). `php artisan conf
 
 ### Próxima sequência
 
-1. Completar contatos/endereço/notas, arquivamento/restauração e preferências persistentes.
-2. Refinar formulários financeiros, edição de recorrência e rascunhos/reconciliação após reload.
-3. Evoluir indicadores/gráficos por período e principal restante no painel; importação/exportação e alertas externos depois.
+1. Refinar formulários financeiros, edição de recorrência e rascunhos/reconciliação após reload.
+2. Evoluir os indicadores mensais para gráficos e filtros de período; importação/exportação e alertas externos depois.
+3. Validar viewport mobile/acessibilidade e ampliar a cobertura HTTP/Livewire no MySQL.
 4. Atualizar PHP para 8.3+ e configurar SMTP, Redis, scheduler e fuso; frontend já alinhado.
 
 Saldo, edição controlada, cadastros, vencidos, seeders, estorno básico e dez cenários
@@ -795,11 +811,11 @@ Não há `tailwind.config.js`; a configuração implementada é CSS-first em
 @source '../../vendor/robsontenorio/mary/src/View/Components/**/*.php';
 ```
 
-O layout `resources/views/components/layout.blade.php` inicia em `data-theme="dark"`.
-O botão **Alternar tema** usa Alpine para alternar `document.documentElement.dataset.theme`
-entre `dark` e `light` na página atual. A preferência ainda não é persistida no banco
-ou navegador. A coluna `users.theme` continua disponível para a próxima tela de
-preferências; não há `Settings/ThemeToggle` implementado.
+O layout `resources/views/components/layout.blade.php` lê `auth()->user()->theme`
+para definir `data-theme` em cada página autenticada. A rota `/preferencias` monta
+`UserPreferences`, que chama `UserPreferencesService` em transação e aceita somente
+`dark`/`light` e 0 a 365 dias. A alteração de tema é aplicada nas próximas páginas
+abertas; não há preferência duplicada no navegador.
 
 ---
 
@@ -979,6 +995,10 @@ que aceite arbitrariamente um proprietário do cliente.
 `markRead(Notification)` exige autenticado e recarrega a propriedade; preserva o
 primeiro `read_at`. `markAllRead()` marca somente notificações não lidas do autenticado.
 `PATCH /notificacoes/{notification}/ler` usa middleware `auth` e retorna ID/data de leitura.
+`POST /notificacoes/atualizar` chama `generateFor(auth()->user())`, não recebe ID de
+proprietário e retorna ao histórico com a quantidade de alertas novos. Isso permite
+verificar vencimentos e atrasos imediatamente quando o scheduler local não está ativo;
+o comando agendado continua responsável pela atualização automática às 08:00.
 
 ### Exibindo notificações no layout
 
@@ -1127,79 +1147,64 @@ class TitlesExport implements FromCollection, WithHeadings
 
 ---
 
-## 12. Dashboard — Gráficos e KPIs
+## 12. Dashboard — Gráficos, KPIs e Relatório
 
-### KPIs do mês atual
+`FinancialDashboard` atende `/dashboard-financeira` e delega toda leitura a
+`FinancialAnalyticsService`. O filtro inicial é o primeiro/último dia do mês atual;
+`clearFilters()` restaura essas datas, remove restrições e fecha o relatório.
 
-Os quatro cards principais do dashboard:
+### Base de cálculo
 
-```php
-// app/Livewire/Dashboard/DashboardPage.php
+A análise não soma `title_settlements.total_value`, porque uma baixa pode ter várias
+formas e contas. Ela lê `title_settlement_methods.value`, junta título, conta, forma,
+categoria e contato sob o mesmo proprietário e soma em centavos PHP:
 
-#[Computed]
-public function kpis(): array
-{
-    $userId = auth()->id();
-    $start  = now()->startOfMonth();
-    $end    = now()->endOfMonth();
+- Baixa dentro do período: valor positivo na `settlement_date`.
+- Estorno dentro do período: mesmo valor negativo na `reversal_date`.
+- Uma baixa/estorno conta como um lançamento, mesmo com várias formas; os valores seguem
+  divididos pelas contas/formas efetivamente usadas.
+- Saldo inicial de conta e títulos sem baixa não entram: essa é uma análise realizada,
+  não previsão nem extrato de saldo.
 
-    $received = TitleSettlement::whereHas('title', fn($q) =>
-        $q->where('user_id', $userId)->where('title_type', 'receivable')
-    )->whereBetween('settlement_date', [$start, $end])->sum('total_value');
+Datas inicial/final são inclusivas. Categorias, formas e contas usam chips de inclusão:
+todos marcados é consolidado; desmarcar um transforma-o em exclusão. Contatos usam
+seleção múltipla inclusiva, com busca; uma seleção vazia inclui todos. IDs são validados
+como pertencentes ao autenticado. Para proteger a renderização, a consulta limita-se a
+10.000 formas por análise e retorna validação solicitando filtros mais restritos acima
+desse limite.
 
-    $paid = TitleSettlement::whereHas('title', fn($q) =>
-        $q->where('user_id', $userId)->where('title_type', 'payable')
-    )->whereBetween('settlement_date', [$start, $end])->sum('total_value');
+### Indicadores, gráficos e relatório
 
-    $pendingReceivable = Title::where('user_id', $userId)
-        ->where('title_type', 'receivable')
-        ->whereIn('status', ['pending', 'overdue'])
-        ->whereBetween('due_date', [$start, $end])
-        ->sum('original_value');
+Os KPIs são entradas, saídas, saldo líquido e quantidade de eventos. O gráfico temporal
+mantém todos os dias do período, inclusive dias sem movimentação, e as distribuições por
+categoria/forma mostram percentuais separados para entradas e saídas. A tabela detalhada
+usa `movement_days`, somente datas com eventos, sem excluir dias de líquido zero após
+estorno. `daily` mantém o período inteiro. `financial-timeline.blade.php` fornece tooltip
+com strings monetárias formatadas no servidor, seleção por posição no SVG, toque e setas
+do teclado; floats são usados apenas para coordenadas do desenho, nunca para totais.
 
-    $pendingPayable = Title::where('user_id', $userId)
-        ->where('title_type', 'payable')
-        ->whereIn('status', ['pending', 'overdue'])
-        ->whereBetween('due_date', [$start, $end])
-        ->sum('original_value');
+`generateReport()` reaplica os filtros e mostra uma visão imprimível. Os agrupamentos
+suportados são `Conta > Contato > Data`, `Conta > Data` e `Conta > Categoria > Data`.
+Cada nível recebe entradas, saídas e saldo subtotal; as folhas exibem data, evento,
+título, contato/categoria, forma e valores. O relatório não mostra prefixos técnicos
+como “Nível”: cada agrupamento recebe apenas seu nome. O cabeçalho contém período,
+parâmetros e quatro cards de KPI (entradas, saídas, saldo e quantidade); subtotais e
+rodapé têm destaque próprio. O rodapé identifica MoneyControl, usuário/e-mail solicitante
+e data/hora de emissão. O tema de impressão força uma página branca, preserva o cabeçalho
+do relatório (ocultando somente a navegação da aplicação), aplica cabeçalho azul, cores
+financeiras, tabela com zebra, cabeçalhos escuros e repetição de `thead`, preservando
+leitura em PDF.
+Não ocultar `main > :not(.financial-report)`: o relatório é descendente do contêiner
+Livewire, e essa regra torna toda a impressão vazia. A classe explícita
+`.financial-dashboard__controls` oculta os controles sem esconder o ancestral do relatório.
+Grupos podem atravessar páginas; linhas da tabela continuam protegidas contra quebra.
+O botão **Imprimir / salvar PDF** usa o diálogo do navegador: não cria arquivo nem recibo
+no servidor.
 
-    return compact('received', 'paid', 'pendingReceivable', 'pendingPayable');
-}
-```
-
-### Gráfico de linha do tempo (MaryUI Chart)
-
-O MaryUI Chart usa Chart.js internamente. Configure assim:
-
-```php
-#[Computed]
-public function timelineChart(): array
-{
-    // Dados por dia para o mês atual
-    return [
-        'type'   => 'line',
-        'data'   => [
-            'labels'   => $this->getLabels(),   // ['01/10', '02/10', ...]
-            'datasets' => [
-                [
-                    'label'           => 'Receitas',
-                    'data'            => $this->getReceivedByDay(),
-                    'borderColor'     => '#22c55e',
-                    'backgroundColor' => 'rgba(34,197,94,0.1)',
-                    'fill'            => true,
-                ],
-                [
-                    'label'           => 'Despesas',
-                    'data'            => $this->getPaidByDay(),
-                    'borderColor'     => '#ef4444',
-                    'backgroundColor' => 'rgba(239,68,68,0.1)',
-                    'fill'            => true,
-                ],
-            ],
-        ],
-    ];
-}
-```
+`FinancialDashboardTest` cobre valores divididos por forma, filtros combinados, estorno
+em período diferente, limites inclusivos, cadastros históricos, isolamento de proprietário,
+todos os agrupamentos e reset. `MySqlFinancialAnalyticsTest` confirma precisão decimal,
+datas de estorno e filtro de conta no banco MySQL de testes.
 
 ---
 

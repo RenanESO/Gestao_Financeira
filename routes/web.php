@@ -22,13 +22,16 @@ Route::middleware('guest')->group(function () {
 Route::middleware('auth')->group(function () {
     Route::post('/sair', [AuthController::class, 'logout'])->name('logout');
     Route::get('/painel', [WorkspaceController::class, 'dashboard'])->name('dashboard');
+    Route::view('/dashboard-financeira', 'financial-dashboard')->name('financial.dashboard');
     Route::get('/cadastros/{module}', [WorkspaceController::class, 'catalog'])->whereIn('module', ['categorias', 'contatos', 'contas', 'formas'])->name('catalog');
     Route::get('/receitas', [WorkspaceController::class, 'titles'])->defaults('type', 'receivable')->name('income');
     Route::get('/despesas', [WorkspaceController::class, 'titles'])->defaults('type', 'payable')->name('expenses');
     Route::get('/titulos/{title}', [WorkspaceController::class, 'title'])->name('titles.show');
     Route::get('/recibos', [WorkspaceController::class, 'receipts'])->name('receipts.index');
     Route::get('/notificacoes', [WorkspaceController::class, 'notifications'])->name('notifications.index');
+    Route::get('/preferencias', [WorkspaceController::class, 'preferences'])->name('preferences');
     Route::post('/notificacoes/ler-todas', [WorkspaceController::class, 'readAll'])->name('notifications.read-all');
+    Route::post('/notificacoes/atualizar', [WorkspaceController::class, 'refreshNotifications'])->name('notifications.refresh');
     Route::post('/notificacoes/{notification}/lida', [WorkspaceController::class, 'read'])->name('notifications.read-web');
     Route::post('/baixas/{settlement}/recibo', [ReceiptController::class, 'store'])->name('receipts.store');
     Route::get('/recibos/{receipt}/download', [ReceiptController::class, 'download'])->name('receipts.download');

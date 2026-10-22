@@ -4,9 +4,12 @@ namespace Tests\Feature;
 
 use App\Livewire\Catalog;
 use App\Livewire\Titles;
+use App\Livewire\UserPreferences;
 use App\Models\Category;
+use App\Models\Contact;
 use App\Models\FinancialAccount;
 use App\Models\Notification;
+use App\Models\PaymentType;
 use App\Models\Title;
 use App\Models\User;
 use App\Services\CatalogService;
@@ -19,6 +22,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Notification as NotificationFacade;
 use Illuminate\Support\Facades\Password;
+use Illuminate\Support\Str;
 use Livewire\Features\SupportLockedProperties\CannotUpdateLockedPropertyException;
 use Livewire\Livewire;
 use Tests\TestCase;
@@ -38,7 +42,7 @@ class WorkspaceTest extends TestCase
         foreach (['home', 'login', 'register', 'password.request'] as $route) {
             $this->get(route($route))->assertOk();
         }
-        foreach (['dashboard', 'income', 'expenses', 'receipts.index', 'notifications.index'] as $route) {
+        foreach (['dashboard', 'income', 'expenses', 'receipts.index', 'notifications.index', 'preferences'] as $route) {
             $this->get(route($route))->assertRedirect(route('login'));
             $this->getJson(route($route))->assertUnauthorized();
         }
@@ -145,7 +149,7 @@ class WorkspaceTest extends TestCase
     public function test_all_workspace_pages_render_for_authenticated_user(): void
     {
         $this->actingAs(User::factory()->create());
-        foreach (['dashboard', 'income', 'expenses', 'receipts.index', 'notifications.index'] as $route) {
+        foreach (['dashboard', 'income', 'expenses', 'receipts.index', 'notifications.index', 'preferences'] as $route) {
             $this->get(route($route))->assertOk()->assertSee('MoneyControl');
         }
         foreach (array_keys(Catalog::MODULES) as $module) {
@@ -178,6 +182,91 @@ class WorkspaceTest extends TestCase
             ->set('form.name', 'Bad')->set('form.initial_balance', '1,50')->call('save')->assertHasErrors('initial_balance');
         $this->assertMissingRecord(fn () => Livewire::actingAs($other)->test(Catalog::class, ['module' => 'contas'])->call('edit', $account->id));
         $this->assertMissingRecord(fn () => Livewire::actingAs($other)->test(Catalog::class, ['module' => 'contas'])->call('toggle', $account->id));
+    }
+
+    public function test_contacts_support_full_details_archive_and_restore(): void
+    {
+        $user = User::factory()->create();
+        $component = Livewire::actingAs($user)->test(Catalog::class, ['module' => 'contatos'])
+            ->set('form.name', '  Ana Cliente  ')
+            ->set('form.type', 'client')
+            ->set('form.document', '123.456.789-00')
+            ->set('form.email', 'ana@example.test')
+            ->set('form.phone', '(11) 99999-0000')
+            ->set('form.address', 'Rua das Flores, 10')
+            ->set('form.neighborhood', 'Centro')
+            ->set('form.city', 'Sao Paulo')
+            ->set('form.state', 'sp')
+            ->set('form.zip_code', '01000-000')
+            ->set('form.notes', 'Contato preferencial')
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $contact = Contact::sole();
+        $this->assertSame('CLI-0001', $contact->code);
+        $this->assertSame('SP', $contact->state);
+        $this->assertSame('Contato preferencial', $contact->notes);
+
+        $component->call('archive', $contact->id);
+        $this->assertSoftDeleted('contacts', ['id' => $contact->id]);
+
+        $component->set('showArchived', true)->call('restore', $contact->id);
+        $this->assertNull($contact->fresh()->deleted_at);
+    }
+
+    public function test_user_preferences_are_validated_persisted_and_applied_to_layout(): void
+    {
+        $user = User::factory()->create(['theme' => 'dark', 'notification_days_before' => 7]);
+
+        Livewire::actingAs($user)->test(UserPreferences::class)
+            ->set('theme', 'light')
+            ->set('notificationDaysBefore', 14)
+            ->call('save')
+            ->assertHasNoErrors();
+
+        $this->assertSame('light', $user->fresh()->theme);
+        $this->assertSame(14, $user->fresh()->notification_days_before);
+        $this->actingAs($user->fresh())->get(route('dashboard'))->assertSee('data-theme="light"', false);
+
+        Livewire::actingAs($user)->test(UserPreferences::class)
+            ->set('notificationDaysBefore', 366)
+            ->call('save')
+            ->assertHasErrors('notification_days_before');
+    }
+
+    public function test_dashboard_uses_remaining_principal_and_monthly_values(): void
+    {
+        $user = User::factory()->create();
+        $this->actingAs($user);
+        $account = app(CatalogService::class)->create(FinancialAccount::class, ['name' => 'Conta', 'type' => 'cash']);
+        $method = app(CatalogService::class)->create(PaymentType::class, ['name' => 'Pix', 'type' => 'both']);
+        $title = app(TitleService::class)->create([
+            'title_type' => 'receivable',
+            'description' => 'Contrato parcial',
+            'original_value' => '100.00',
+            'issue_date' => now()->toDateString(),
+            'due_date' => now()->toDateString(),
+        ]);
+        app(TitleService::class)->settle($title, $title->installments->sole(), [
+            'idempotency_key' => (string) Str::uuid(),
+            'settlement_date' => now()->toDateString(),
+            'original_value' => '40.00',
+            'discount' => '0.00',
+            'interest' => '0.00',
+            'fine' => '0.00',
+            'payment_methods' => [[
+                'payment_type_id' => $method->id,
+                'financial_account_id' => $account->id,
+                'value' => '40.00',
+            ]],
+        ]);
+
+        $this->get(route('dashboard'))
+            ->assertOk()
+            ->assertSee('Saldo restante das parcelas')
+            ->assertSee('R$ 60,00')
+            ->assertSee('Recebido no periodo')
+            ->assertSee('R$ 40,00');
     }
 
     public function test_titles_creation_preserves_exact_installments_and_owner(): void
@@ -236,6 +325,32 @@ class WorkspaceTest extends TestCase
         $this->assertNotNull($own->fresh()->read_at);
         $this->assertNull($foreign->fresh()->read_at);
         $this->assertSame(0, Notification::unread()->count());
+    }
+
+    public function test_notification_refresh_creates_due_and_overdue_alerts_without_duplicates(): void
+    {
+        $user = User::factory()->create(['notification_days_before' => 7]);
+        $this->actingAs($user);
+        app(TitleService::class)->create([
+            'title_type' => 'receivable', 'description' => 'Vence em breve', 'original_value' => '10.00',
+            'issue_date' => now()->toDateString(), 'due_date' => now()->addDays(3)->toDateString(),
+        ]);
+        app(TitleService::class)->create([
+            'title_type' => 'payable', 'description' => 'Em atraso', 'original_value' => '20.00',
+            'issue_date' => now()->subDays(2)->toDateString(), 'due_date' => now()->subDay()->toDateString(),
+        ]);
+
+        $this->post(route('notifications.refresh'))
+            ->assertRedirect()
+            ->assertSessionHas('status', '2 alerta(s) atualizado(s).');
+        $this->assertDatabaseCount('notifications', 2);
+        $this->assertDatabaseHas('notifications', ['user_id' => $user->id, 'title' => 'Parcela vencida']);
+        $this->assertDatabaseHas('notifications', ['user_id' => $user->id, 'title' => 'Parcela vencendo em breve']);
+
+        $this->post(route('notifications.refresh'))
+            ->assertRedirect()
+            ->assertSessionHas('status', 'Nenhum novo alerta encontrado para a antecedencia configurada.');
+        $this->assertDatabaseCount('notifications', 2);
     }
 
     public function test_display_formats_signed_money_without_float(): void

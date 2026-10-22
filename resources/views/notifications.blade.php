@@ -1,9 +1,12 @@
 <x-layout title="Notificacoes">
     <div class="flex flex-wrap items-center justify-between gap-4 mb-3">
         <h1 class="page-title">Notificacoes</h1>
-        <form method="POST" action="{{ route('notifications.read-all') }}">@csrf<button class="btn btn-outline btn-sm">Marcar todas como lidas</button></form>
+        <div class="flex flex-wrap gap-2">
+            <form method="POST" action="{{ route('notifications.refresh') }}">@csrf<button class="btn btn-primary btn-sm">Atualizar alertas</button></form>
+            <form method="POST" action="{{ route('notifications.read-all') }}">@csrf<button class="btn btn-outline btn-sm">Marcar todas como lidas</button></form>
+        </div>
     </div>
-    <p class="muted mb-7">Alertas internos de vencimento. O historico permanece apos leitura ou pagamento.</p>
+    <p class="muted mb-7">Alertas internos de vencimento. Atualize agora ou aguarde a rotina diaria das 08:00. O historico permanece apos leitura ou pagamento.</p>
     <x-feedback />
     <section class="panel">
         @forelse($notifications as $notification)

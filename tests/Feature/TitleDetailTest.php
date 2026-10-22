@@ -131,6 +131,22 @@ class TitleDetailTest extends TestCase
         $component->assertSee('R$ 50,00');
     }
 
+    public function test_payment_summary_compares_adjusted_total_with_methods_before_submission(): void
+    {
+        $component = $this->payment($this->detail(), '50.00')
+            ->set('payment.discount', '5.00')
+            ->set('payment.interest', '2.00')
+            ->set('payment.fine', '1.00')
+            ->set('payment.payment_methods.0.value', '47.00');
+
+        $component->assertSee('Total esperado')
+            ->assertSee('R$ 48,00')
+            ->assertSee('Faltam R$ 1,00');
+
+        $component->set('payment.payment_methods.0.value', '48.00')
+            ->assertSee('Valores conferem');
+    }
+
     public function test_failed_validation_keeps_key_and_allows_correction(): void
     {
         $component = $this->payment($this->detail(), '30.00');
@@ -139,6 +155,20 @@ class TitleDetailTest extends TestCase
         $this->assertSame($key, $component->get('paymentKey'));
         $this->assertDatabaseCount('title_settlements', 0);
         $component->set('payment.payment_methods.0.value', '30.00')->call('settle')->assertHasNoErrors();
+    }
+
+    public function test_payment_requires_active_account_and_compatible_method_before_opening_request(): void
+    {
+        app(CatalogService::class)->update($this->account, ['active' => false]);
+        $this->detail()->call('openPayment', $this->title->installments->first()->id)
+            ->assertHasErrors('payment')
+            ->assertSee('Cadastre e ative uma conta financeira');
+
+        app(CatalogService::class)->update($this->account, ['active' => true]);
+        app(CatalogService::class)->update($this->method, ['active' => false]);
+        $this->detail()->call('openPayment', $this->title->installments->first()->id)
+            ->assertHasErrors('payment')
+            ->assertSee('Cadastre e ative uma forma compativel');
     }
 
     public function test_stale_snapshot_replay_is_idempotent_and_changed_payload_is_rejected(): void
@@ -248,11 +278,51 @@ class TitleDetailTest extends TestCase
         $this->assertSame($this->account->id, $title->financial_account_id);
     }
 
+    public function test_edit_can_enable_yearly_recurrence_before_any_payment(): void
+    {
+        $this->detail()->call('openEdit')
+            ->set('edit.is_recurring', true)
+            ->set('edit.recurrence_type', 'yearly')
+            ->set('edit.recurrence_day', 20)
+            ->set('edit.recurrence_month', 11)
+            ->set('edit.due_date', '2026-11-20')
+            ->call('saveEdit')
+            ->assertHasNoErrors();
+
+        $title = $this->title->fresh()->load('installments');
+        $this->assertTrue($title->is_recurring);
+        $this->assertSame('yearly', $title->recurrence_type);
+        $this->assertSame(20, $title->recurrence_day);
+        $this->assertSame(11, $title->recurrence_month);
+        $this->assertSame('2026-11-20', $title->installments->sole()->due_date->toDateString());
+    }
+
+    public function test_edit_can_disable_recurrence_before_any_payment(): void
+    {
+        $title = $this->createTitle([
+            'is_recurring' => true,
+            'recurrence_type' => 'monthly',
+            'recurrence_day' => 16,
+        ]);
+
+        $this->detail($title)->call('openEdit')
+            ->set('edit.is_recurring', false)
+            ->call('saveEdit')
+            ->assertHasNoErrors();
+
+        $title->refresh();
+        $this->assertFalse($title->is_recurring);
+        $this->assertNull($title->recurrence_type);
+        $this->assertNull($title->recurrence_day);
+        $this->assertNull($title->recurrence_month);
+    }
+
     public function test_metadata_edit_after_reversal_and_financial_injection_rejected(): void
     {
         $component = $this->payment($this->detail())->call('settle');
         $component->call('openReversal', TitleSettlement::sole()->id)->set('reversal.reason', 'Correcao')->call('reverse')
             ->call('openEdit')->set('edit.original_value', '1.00')->call('saveEdit')->assertHasErrors('original_value');
+        $component->call('openEdit')->set('edit.is_recurring', true)->call('saveEdit')->assertHasErrors('is_recurring');
         $component->call('openEdit')->set('edit.description', 'Descricao corrigida')->call('saveEdit')->assertHasNoErrors();
         $this->assertSame('Descricao corrigida', $this->title->fresh()->description);
         $this->assertSame('100.00', $this->title->fresh()->original_value);

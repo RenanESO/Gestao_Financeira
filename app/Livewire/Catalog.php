@@ -30,6 +30,8 @@ class Catalog extends Component
 
     public string $search = '';
 
+    public bool $showArchived = false;
+
     public array $form = [];
 
     public function mount(string $module): void
@@ -44,6 +46,11 @@ class Catalog extends Component
         $this->resetPage();
     }
 
+    public function updatedShowArchived(): void
+    {
+        $this->resetPage();
+    }
+
     public function clearForm(): void
     {
         $this->editing = null;
@@ -51,12 +58,23 @@ class Catalog extends Component
         $this->form = ['name' => '', 'type' => array_key_first(self::MODULES[$this->module][2]), 'active' => true];
         if (in_array($this->module, ['categorias', 'contas'], true)) {
             $this->form['color'] = '#14b8a6';
+            $this->form['icon'] = '';
         }
         if ($this->module === 'contas') {
             $this->form['initial_balance'] = '0.00';
         }
         if ($this->module === 'contatos') {
-            $this->form += ['document' => '', 'email' => '', 'phone' => ''];
+            $this->form += [
+                'document' => '',
+                'email' => '',
+                'phone' => '',
+                'address' => '',
+                'neighborhood' => '',
+                'city' => '',
+                'state' => '',
+                'zip_code' => '',
+                'notes' => '',
+            ];
         }
     }
 
@@ -89,14 +107,34 @@ class Catalog extends Component
         session()->flash('status', $record->active ? 'Cadastro desativado. Historico preservado.' : 'Cadastro ativado.');
     }
 
+    public function archive(int $id, CatalogService $service): void
+    {
+        abort_unless($this->module === 'contatos', 404);
+        $service->archive(Contact::findOrFail($id));
+        $this->clearForm();
+        session()->flash('status', 'Contato arquivado. O historico financeiro foi preservado.');
+    }
+
+    public function restore(int $id, CatalogService $service): void
+    {
+        abort_unless($this->module === 'contatos', 404);
+        $service->restore(Contact::withTrashed()->findOrFail($id));
+        session()->flash('status', 'Contato restaurado.');
+    }
+
     public function render()
     {
         [$model, $title, $types] = self::MODULES[$this->module];
+        $query = $model::query();
+
+        if ($this->module === 'contatos' && $this->showArchived) {
+            $query->withTrashed();
+        }
 
         return view('livewire.catalog', [
             'title' => $title,
             'types' => $types,
-            'records' => $model::where('name', 'like', '%'.mb_substr($this->search, 0, 100).'%')->orderBy('name')->paginate(12),
+            'records' => $query->where('name', 'like', '%'.mb_substr($this->search, 0, 100).'%')->orderBy('name')->paginate(12),
         ]);
     }
 }

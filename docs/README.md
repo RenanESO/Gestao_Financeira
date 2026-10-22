@@ -20,19 +20,20 @@ estão implementados, com seeders que não criam usuários de demonstração.
 reabre principal, invalida recibos existentes e trata próximos ciclos sem movimentos.
 `ReceiptService` emite PDF privado com snapshot, hash e numeração global; download
 autorizado bloqueia estornos e arquivos inválidos. `NotificationService` gera alertas
-internos deduplicados por parcela/vencimento e permite marcar leitura.
-Validação: **303 testes, 1297 assertions em SQLite** e **158 testes, 1003 assertions em MySQL**.
+internos deduplicados por parcela/vencimento e permite marcar leitura ou atualização manual.
+Validação: **324 testes, 1446 assertions em SQLite**; MySQL: última regressão completa com **158 testes, 1003 assertions**, além de uma suíte focal da análise financeira.
 
 A primeira interface está disponível: apresentação, login, registro, recuperação de senha,
-painel, cadastros, receitas/despesas, detalhes de títulos, recibos e notificações.
+painel, dashboard financeira analítica, cadastros, receitas/despesas, detalhes de títulos, recibos e notificações.
 Registro cria atomicamente categorias/formas padrão, sem dados financeiros fictícios.
 Cadastros permitem criação/edição/desativação. Títulos permitem criação simples,
 parcelada ou recorrente (mensal/anual), consulta e edição controlada. A tela de detalhe
-permite baixar parcial/totalmente com até 20 formas e ajustes, estornar com motivo/data,
+permite baixar parcial/totalmente com até 20 formas e ajustes, confere o total antes do envio, estornar com motivo/data,
 cancelar sem baixas ativas e emitir/verificar recibo PDF separadamente.
 UUIDs de baixa/estorno são mantidos para reenvio do mesmo pedido sem duplicação.
-Próxima etapa: contatos completos, preferências e evolução do painel.
-Gráficos, notificações externas e importação/exportação
+Contatos completos, preferências persistentes, indicadores mensais iniciais do painel e
+dashboard financeira com filtros, gráficos e relatório imprimível também estão disponíveis.
+Notificações externas e importação/exportação
 continuam pendentes. Os módulos abaixo incluem o alvo completo, não apenas telas já entregues.
 Livewire 3.8.10 e MaryUI 2.9 estão em produção. Tailwind 4/daisyUI 5 substituem o alvo
 antigo Tailwind 3; Vite 6/plugin Laravel Vite 1 são compatíveis com Node 20.13.1.
@@ -76,7 +77,7 @@ O **MoneyControl** é um assistente pessoal de despesas que permite ao usuário:
 - Gerenciar **contas financeiras** (corrente, poupança, cartão, dinheiro)
 - Cadastrar **clientes e fornecedores** vinculados aos títulos
 - Acompanhar **categorias** de receitas e despesas
-- Visualizar **dashboard** com gráficos de faturamento e despesas por período
+- Visualizar **dashboard** com indicadores mensais, saldos e próximos compromissos
 - Receber **notificações** de títulos próximos ao vencimento
 - Realizar a **baixa de títulos** com múltiplas formas de pagamento
 - Gerar **recibos em PDF** para títulos baixados
@@ -143,12 +144,12 @@ O diagrama completo de entidades e relacionamentos está documentado em [`DATABA
 - Reset de senha por Password Broker; envio externo depende de SMTP (local usa `log`)
 - Gerenciamento de sessão
 
-### 2. 📊 Dashboard
-- Resumo financeiro do mês atual
-- Saldo total por conta financeira
-- Gráfico de faturamento (linha do tempo: dia / mês / ano)
-- Gráfico de despesas por categoria (pizza/donut)
-- Gráfico misto receitas vs despesas
+### 2. 📊 Dashboards
+- Visão geral: resumo financeiro do mês atual e saldo por conta
+- Dashboard financeira: filtros globais por período, categorias, formas, contas e contatos
+- Cards de entradas, saídas, saldo líquido e quantidade de baixas/estornos
+- Evolução diária de entradas versus saídas e distribuição por categoria e forma
+- Relatório tabular imprimível com os agrupamentos Conta > Contato > Data, Conta > Data e Conta > Categoria > Data
 - Atalhos para títulos próximos ao vencimento (baixa rápida)
 - Cards com totais: Receitas, Despesas, Saldo Líquido
 
@@ -204,8 +205,8 @@ O diagrama completo de entidades e relacionamentos está documentado em [`DATABA
 
 ### 11. ⚙️ Configurações
 - Edição de perfil (nome, e-mail, avatar/foto)
-- Preferência de tema (Dark / Light) — **Dark por padrão**
-- Configurar dias de antecedência para alertas
+- Preferência persistente de tema (Dark / Light) — **Dark por padrão**
+- Configurar dias de antecedência para alertas (0 a 365 dias)
 - Importação de títulos via planilha Excel/CSV
 - Exportação de relatórios para Excel/CSV/PDF
 
@@ -358,8 +359,29 @@ php artisan serve
 ```
 
 Na página inicial, use **Criar minha conta** ou **Acessar**.
-Após entrar, `/painel` oferece navegação para receitas, despesas, contas, contatos,
-categorias, formas, recibos e notificações. Use valores com ponto decimal, sem milhar.
+Após entrar, `/painel` oferece navegação para receitas, despesas, dashboard financeira, contas, contatos,
+categorias, formas, recibos, notificações e preferências. Use valores com ponto decimal, sem milhar.
+Contatos podem ser arquivados e restaurados, sempre preservando vínculos financeiros.
+
+### Dashboard Financeira e Relatório
+
+Acesse **Dashboard financeira** no menu. O período começa e termina no mês corrente;
+use **Aplicar filtros** para as datas e os chips para incluir/excluir categorias, formas
+e contas. Sem chips desmarcados, o resultado é consolidado. Contatos usam seleção múltipla
+com busca; sem contato selecionado, todos entram.
+
+Os indicadores usam somente movimentos realizados: cada forma de baixa é registrada na
+conta/forma correspondente; estornos entram como valor negativo na data do estorno.
+Saldo inicial e títulos ainda pendentes não entram. O botão **Gerar relatório** abre uma
+visão tabular profissional para impressão ou salvamento pelo diálogo do navegador, com
+cabeçalho do período, cards de entradas/saídas/saldo/lançamentos, agrupamentos claros,
+subtotais destacados, total geral, cores financeiras e linhas zebra. A versão impressa
+sempre usa página branca, informa o sistema emissor, usuário responsável e data/hora de
+emissão, independentemente do tema escuro/claro da aplicação. Não cria um PDF armazenado
+no servidor.
+O gráfico mantém todos os dias do período e permite consultar data, entradas e saídas
+com mouse, toque ou setas do teclado. **Ver valores por data** lista somente datas com
+movimentos, inclusive dias em que baixa e estorno se anulam.
 Na lista de receitas/despesas, abra a descrição do título. No detalhe, escolha
 **Registrar baixa**, informe principal, ajustes e formas/contas e confirme.
 As formas precisam somar principal - desconto + juros + multa. O PDF é emitido
@@ -367,6 +389,12 @@ depois, em **Emitir recibo PDF** no histórico. Estorno preserva a baixa e inval
 o documento; cancelamento exige não haver baixas ativas.
 Em falha de conexão, confira o histórico e reenvie o mesmo pedido antes de iniciar
 outro. Rascunhos/chaves não persistem após recarregar a página.
+Antes da baixa, cadastre uma **conta financeira ativa** e uma **forma de pagamento ou
+recebimento ativa e compatível**. Usuários novos recebem categorias e formas padrão,
+mas não recebem contas fictícias.
+Antes de qualquer baixa, títulos sem histórico também podem ter a recorrência mensal/anual
+ativada, ajustada ou desativada em **Editar título**. Cadeias já geradas e títulos com
+qualquer baixa mantêm a configuração protegida.
 O painel mostra contagens de títulos e saldo realizado por conta, não gráficos ou projeções.
 O layout é `resources/views/components/layout.blade.php`; os componentes implementados
 são `app/Livewire/Catalog.php`, `Titles.php` e `TitleDetail.php`. A árvore de diretórios deste documento contém também
@@ -523,9 +551,11 @@ os usuários por transações separadas. Em desenvolvimento, `php artisan schedu
 mantém o scheduler ativo; em produção, configurar `schedule:run` a cada minuto.
 A agenda de vencidos roda às 00:05 e a de alertas às 08:00 no fuso da aplicação (atualmente UTC),
 com `withoutOverlapping()`. Nenhum serviço do Windows foi configurado automaticamente.
-Antecedência das notificações: preferência do usuário, padrão 7 dias; aceita 0–365 no Service.
+Antecedência das notificações: preferência do usuário, padrão 7 dias; aceita 0–365 na tela de preferências.
 Alertas são internos ao banco, não e-mail/push/SMS. A tela `/notificacoes` lista o histórico
-e permite marcar leitura individual ou em lote.
+e permite atualizar os alertas imediatamente, além de marcar leitura individual ou em lote.
+O agendamento às 08:00 só é automático enquanto `php artisan schedule:work` estiver
+ativo localmente ou `schedule:run` for acionado a cada minuto em produção.
 DomPDF (`barryvdh/laravel-dompdf` 3.1.2 e `dompdf/dompdf` 3.1.6) está no lock de produção;
 em outra máquina, `composer install` instala as versões previstas.
 

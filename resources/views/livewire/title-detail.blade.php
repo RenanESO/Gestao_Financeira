@@ -33,6 +33,15 @@
                     <label class="field">Valor total<input class="input w-full" inputmode="decimal" wire:model="edit.original_value" required></label>
                     <label class="field">Emissao<input class="input w-full" type="date" wire:model="edit.issue_date" required></label>
                     <label class="field">Primeiro vencimento<input class="input w-full" type="date" wire:model="edit.due_date" required></label>
+                    <label class="flex items-center gap-2 text-sm md:col-span-2"><input class="checkbox checkbox-sm" type="checkbox" wire:model.live="edit.is_recurring">Titulo recorrente</label>
+                    @if($edit['is_recurring'])
+                        <label class="field">Recorrencia<select class="select w-full" wire:model.live="edit.recurrence_type"><option value="monthly">Mensal</option><option value="yearly">Anual</option></select></label>
+                        <label class="field">Dia previsto<input class="input w-full" type="number" min="1" max="31" wire:model="edit.recurrence_day" required></label>
+                        @if($edit['recurrence_type'] === 'yearly')
+                            <label class="field">Mes previsto<input class="input w-full" type="number" min="1" max="12" wire:model="edit.recurrence_month" required></label>
+                        @endif
+                        <p class="muted md:col-span-2">A recorrencia exige uma parcela e vencimento compativel com o dia e, na anual, o mes informado.</p>
+                    @endif
                     @foreach(['category_id' => ['Categoria', $categories], 'contact_id' => ['Contato', $contacts], 'financial_account_id' => ['Conta prevista', $accounts]] as $field => [$label, $options])
                         <label class="field">{{ $label }}<select class="select w-full" wire:model="edit.{{ $field }}">
                             <option value="">Sem vinculo</option>
@@ -72,18 +81,32 @@
                 <form wire:submit="settle" class="space-y-5">
                     <div class="grid gap-4 md:grid-cols-3">
                         <label class="field">Data da baixa<input class="input w-full" type="date" wire:model="payment.settlement_date" required></label>
-                        <label class="field">Principal a baixar<input class="input w-full" inputmode="decimal" wire:model="payment.original_value" required></label>
+                        <label class="field">Principal a baixar<input class="input w-full" inputmode="decimal" wire:model.live.debounce.300ms="payment.original_value" required></label>
                         @foreach(['discount' => 'Desconto', 'interest' => 'Juros', 'fine' => 'Multa'] as $field => $label)
-                            <label class="field">{{ $label }}<input class="input w-full" inputmode="decimal" wire:model="payment.{{ $field }}" required></label>
+                            <label class="field">{{ $label }}<input class="input w-full" inputmode="decimal" wire:model.live.debounce.300ms="payment.{{ $field }}" required></label>
                         @endforeach
                         <label class="field">Observacoes<textarea class="textarea w-full" wire:model="payment.notes" maxlength="10000"></textarea></label>
+                    </div>
+                    <div class="grid gap-3 rounded-xl border border-base-content/10 bg-base-200/40 p-4 sm:grid-cols-3">
+                        <div><p class="muted">Total esperado</p><p class="mt-1 font-semibold">{{ $paymentSummary['total'] === null ? 'Preencha os valores' : \App\Support\Display::money($paymentSummary['total']) }}</p></div>
+                        <div><p class="muted">Formas informadas</p><p class="mt-1 font-semibold">{{ $paymentSummary['methods'] === null ? 'Preencha as formas' : \App\Support\Display::money($paymentSummary['methods']) }}</p></div>
+                        <div>
+                            <p class="muted">Conferencia</p>
+                            @if($paymentSummary['difference'] === 0)
+                                <p class="mt-1 font-semibold text-success">Valores conferem</p>
+                            @elseif($paymentSummary['difference'] !== null)
+                                <p class="mt-1 font-semibold text-warning">{{ $paymentSummary['difference'] < 0 ? 'Faltam ' : 'Excedem ' }}{{ \App\Support\Display::money(\App\Support\Money::signedDecimal(abs($paymentSummary['difference']))) }}</p>
+                            @else
+                                <p class="mt-1 font-semibold text-warning">Complete os valores</p>
+                            @endif
+                        </div>
                     </div>
                     <h3 class="font-semibold">Formas de {{ $title->title_type === 'receivable' ? 'recebimento' : 'pagamento' }}</h3>
                     @foreach($payment['payment_methods'] as $index => $row)
                         <div class="grid items-end gap-3 md:grid-cols-4" wire:key="method-{{ $paymentKey }}-{{ $index }}">
                             <label class="field">Forma {{ $index + 1 }}<select class="select w-full" wire:model="payment.payment_methods.{{ $index }}.payment_type_id" required><option value="">Selecione</option>@foreach($methods as $method)<option value="{{ $method->id }}">{{ $method->name }}</option>@endforeach</select></label>
                             <label class="field">Conta<select class="select w-full" wire:model="payment.payment_methods.{{ $index }}.financial_account_id" required><option value="">Selecione</option>@foreach($accounts as $account)<option value="{{ $account->id }}">{{ $account->name }}</option>@endforeach</select></label>
-                            <label class="field">Valor<input class="input w-full" inputmode="decimal" wire:model="payment.payment_methods.{{ $index }}.value" required></label>
+                            <label class="field">Valor<input class="input w-full" inputmode="decimal" wire:model.live.debounce.300ms="payment.payment_methods.{{ $index }}.value" required></label>
                             @if(count($payment['payment_methods']) > 1)<button class="btn btn-ghost" type="button" wire:click="removeMethod({{ $index }})">Remover forma</button>@endif
                         </div>
                     @endforeach

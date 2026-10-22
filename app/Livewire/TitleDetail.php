@@ -84,12 +84,23 @@ class TitleDetail extends Component
     {
         $title = $this->record();
         $installment = $this->installment($id);
+        $paymentType = $title->title_type === 'receivable' ? 'receipt' : 'payment';
         if ($this->installmentId !== null && $this->completedPayment === null) {
             throw ValidationException::withMessages(['payment' => 'Conclua ou descarte o pedido aberto antes de iniciar outro.']);
         }
         if (! in_array($title->status, ['pending', 'partial', 'overdue'], true)
             || ! in_array($installment->status, ['pending', 'overdue'], true)) {
             throw ValidationException::withMessages(['status' => 'Parcela nao permite nova baixa.']);
+        }
+        if (! FinancialAccount::where('active', true)->exists()) {
+            throw ValidationException::withMessages([
+                'payment' => 'Cadastre e ative uma conta financeira antes de registrar a baixa.',
+            ]);
+        }
+        if (! PaymentType::where('active', true)->whereIn('type', [$paymentType, 'both'])->exists()) {
+            throw ValidationException::withMessages([
+                'payment' => 'Cadastre e ative uma forma compativel antes de registrar a baixa.',
+            ]);
         }
         $remaining = $this->remaining($installment->load('settlements.reversal'));
         $this->resetValidation();
@@ -195,7 +206,10 @@ class TitleDetail extends Component
         $this->resetValidation();
         $this->edit = $title->only(['description', 'document_number', 'reference', 'notes']);
         if (! $title->settlements()->exists()) {
-            $this->edit += $title->only(['original_value', 'category_id', 'contact_id', 'financial_account_id']);
+            $this->edit += $title->only([
+                'original_value', 'category_id', 'contact_id', 'financial_account_id',
+                'is_recurring', 'recurrence_type', 'recurrence_day', 'recurrence_month',
+            ]);
             $this->edit['issue_date'] = $title->issue_date->toDateString();
             $this->edit['due_date'] = $title->due_date->toDateString();
         }
@@ -228,6 +242,7 @@ class TitleDetail extends Component
                 ], true) ? null : $value;
             }
         }
+        $changes = $this->normalizeRecurrenceChanges($changes);
         $service->update($this->record(), $changes);
         $this->closeEdit();
         session()->flash('status', 'Titulo atualizado sem alterar a identidade das parcelas.');
@@ -252,6 +267,81 @@ class TitleDetail extends Component
         return Money::decimal(Money::cents($installment->value) - $paid, 'installments');
     }
 
+    private function normalizeRecurrenceChanges(array $changes): array
+    {
+        $fields = ['is_recurring', 'recurrence_type', 'recurrence_day', 'recurrence_month'];
+        if (array_intersect(array_keys($changes), $fields) === []) {
+            return $changes;
+        }
+
+        $recurring = filter_var(
+            $changes['is_recurring'] ?? $this->originalEdit['is_recurring'] ?? false,
+            FILTER_VALIDATE_BOOLEAN
+        );
+        if (! $recurring) {
+            $changes['is_recurring'] = false;
+            $changes['recurrence_type'] = null;
+            $changes['recurrence_day'] = null;
+            $changes['recurrence_month'] = null;
+
+            return $changes;
+        }
+
+        $changes['is_recurring'] = true;
+        foreach (['recurrence_type', 'recurrence_day', 'recurrence_month'] as $field) {
+            if (array_key_exists($field, $changes) && $changes[$field] === '') {
+                $changes[$field] = null;
+            }
+        }
+        $type = $changes['recurrence_type'] ?? $this->originalEdit['recurrence_type'] ?? null;
+        if ($type === 'monthly') {
+            $changes['recurrence_month'] = null;
+        }
+
+        return $changes;
+    }
+
+    private function paymentSummary(): array
+    {
+        $principal = $this->previewCents($this->payment['original_value'] ?? null);
+        $discount = $this->previewCents($this->payment['discount'] ?? null);
+        $interest = $this->previewCents($this->payment['interest'] ?? null);
+        $fine = $this->previewCents($this->payment['fine'] ?? null);
+        $valid = ! in_array(null, [$principal, $discount, $interest, $fine], true);
+        $total = $valid ? $principal - $discount + $interest + $fine : null;
+        if ($total !== null && $total <= 0) {
+            $total = null;
+            $valid = false;
+        }
+
+        $methods = 0;
+        foreach ($this->payment['payment_methods'] ?? [] as $method) {
+            $value = $this->previewCents($method['value'] ?? null);
+            if ($value === null) {
+                $valid = false;
+
+                continue;
+            }
+            $methods += $value;
+        }
+
+        return [
+            'valid' => $valid,
+            'total' => $total === null ? null : Money::decimal($total),
+            'methods' => $valid ? Money::decimal($methods) : null,
+            'difference' => $total === null || ! $valid ? null : $methods - $total,
+        ];
+    }
+
+    private function previewCents(mixed $value): ?int
+    {
+        try {
+            return Money::cents($value);
+        } catch (ValidationException) {
+            return null;
+        }
+    }
+
     public function render()
     {
         $title = $this->record()->load('category', 'contact', 'financialAccount',
@@ -265,6 +355,7 @@ class TitleDetail extends Component
 
         return view('livewire.title-detail', [
             'title' => $title, 'remaining' => $remaining,
+            'paymentSummary' => $this->paymentSummary(),
             'hasHistory' => $title->settlements->isNotEmpty(),
             'hasActive' => $title->settlements->contains(fn ($settlement) => $settlement->reversal === null),
             'accounts' => FinancialAccount::where('active', true)->orderBy('name')->get(),

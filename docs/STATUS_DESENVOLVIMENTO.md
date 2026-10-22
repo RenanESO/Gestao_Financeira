@@ -1,15 +1,25 @@
 # Status do Desenvolvimento
 
-**Data:** 16/10/2026
+**Data:** 22/10/2026
 
 ## Onde Paramos
 
-Concluímos a **integração das operações financeiras na interface de títulos**:
+Concluímos a **consolidação dos contatos, preferências e indicadores iniciais do painel**,
+mantendo a integração das operações financeiras na interface de títulos:
 baixa parcial/total, múltiplas formas, ajustes, estorno auditável, edição controlada,
 cancelamento e emissão separada de recibos. Criação de recorrência mensal/anual
 também está disponível. O domínio financeiro anterior foi preservado.
-A próxima entrega deve completar contatos/preferências e evoluir o painel,
-sem refazer a autenticação nem as operações financeiras já entregues.
+A próxima entrega deve refinar os formulários financeiros e a experiência em diferentes
+viewports, sem refazer a autenticação, os cadastros ou as operações financeiras já entregues.
+Nesta retomada, confirmamos a baixa e os alertas internos em execução isolada e
+eliminamos os bloqueios operacionais que impediam o uso imediato pela interface.
+Nesta etapa, completamos a prévia de conferência das baixas e a edição de recorrência
+antes de qualquer histórico financeiro.
+Também concluímos a dashboard financeira analítica e refinamos seu relatório para
+impressão/salvamento em PDF, preservando o domínio financeiro e sem gravar documentos
+no servidor.
+Corrigida a impressão vazia causada pela ocultação do ancestral Livewire do relatório.
+Gráfico mantém todo o período e possui tooltip por data; a tabela lista só dias com eventos.
 
 Já implementado:
 
@@ -51,6 +61,18 @@ Já implementado:
 - Cancelamento exige ausência de baixas ativas; recibos invalidados continuam no histórico.
 - Emissão de PDF separada, verificação de recibo existente e mensagens para arquivo ausente/corrompido ou falha de armazenamento.
 - Recorrência na criação: mensal/anual, uma parcela, dia/mes compatíveis com o vencimento.
+- Contatos agora incluem endereço, bairro, cidade, UF, CEP e observações; a lista permite arquivar e restaurar sem exclusão física.
+- Página `/preferencias`: tema claro/escuro e antecedência de alertas persistidos em `users`, com validação de 0 a 365 dias.
+- Layout aplica o tema persistido a cada página autenticada.
+- Painel mostra totais abertos e realizados do mês; estornos no período reduzem o realizado.
+- Próximos compromissos mostram o principal restante da parcela, não o valor original.
+- Abrir baixa exige previamente conta financeira ativa e forma ativa compatível; a interface informa a ausência antes de criar UUID/pedido.
+- Alertas podem ser atualizados em `/notificacoes` pelo proprietário autenticado, além da rotina agendada diária.
+- Formulário de baixa mostra total esperado, soma das formas e diferença em tempo real; a regra definitiva continua no `TitleService`.
+- Edição sem baixas permite ativar, alterar ou desativar recorrência mensal/anual. A interface não expõe essa alteração após histórico ou em cadeia já gerada.
+- `/dashboard-financeira` consolida baixas e estornos por período, categoria, forma, conta e contato, com KPIs, evolução diária e distribuições.
+- Relatório financeiro imprime com cabeçalho, parâmetros, cards de indicadores, agrupamentos sem rótulos técnicos, subtotais destacados, total geral, cores e linhas zebra.
+- Impressão do relatório usa página branca mesmo com tema escuro; identifica MoneyControl, usuário/e-mail solicitante e data/hora de emissão.
 
 A edição mantém número, proprietário, tipo, quantidade e IDs das parcelas.
 Com baixas, só permite metadados; mudanças de valores e vínculos são bloqueadas.
@@ -64,12 +86,18 @@ nem criar usuários de demonstração.
 
 ## Validação Atual
 
-- SQLite: **303 testes aprovados, 1297 assertions**.
+- SQLite: **324 testes aprovados, 1446 assertions**.
 - MySQL: **158 testes aprovados, 1003 assertions na execução final**.
 - Concorrência cobre numeração, baixa idempotente, excesso de principal, edição/baixa, cancelamento/baixa, estorno idempotente e origem/filho recorrente.
 - Quantidade de assertions das disputas pode variar conforme qual processo vencer; ambos os resultados válidos são testados.
 - Concorrência adicional cobre emissão idempotente de PDF, emissão versus estorno e notificações duplicadas.
-- Pint e build de produção aprovados; nenhuma dependência foi alterada nesta etapa. Auditorias sem advisories foram verificadas na instalação anterior.
+- Pint, cache de views e build de produção aprovados; nenhuma dependência ou migration foi alterada nesta etapa.
+- Regressão MySQL desta entrega executou 157/158 testes: a observação concorrente de dois `LOCK WAIT` falhou uma vez por agendamento de processos; o mesmo cenário isolado passou (1 teste, 11 assertions), sem alteração da asserção estrita.
+- Nesta retomada, as suites MySQL focais de títulos e notificações passaram: **70 testes / 389 assertions**.
+- Nesta etapa, `MySqlTitleServiceTest` passou com **52 testes / 215 assertions**.
+- `FinancialDashboardTest`: **13 testes / 84 assertions**, incluindo datas com eventos, líquido zero e intervalo de um dia.
+- Edge headless: hover e teclado do gráfico, fundo branco, ancestral visível, cabeçalho e tabela de impressão conferidos; PDF temporário gerado fora do projeto.
+- `MySqlFinancialAnalyticsTest` valida precisão decimal, estorno e filtro de conta no banco de testes.
 - `schedule:list` reconhece vencidos às 00:05 e alertas às 08:00; scheduler ainda precisa ser iniciado/configurado.
 - Migration `2026_10_16_000002_add_receipt_snapshots_and_notification_deduplication` aplicada: 17 migrations, 21 tabelas, 22 FKs restritivas.
 - Testes MySQL comuns usam rollback. Testes de concorrência precisam de fixtures confirmadas por commit, removidas ao final apenas pelo ID/email exclusivo do teste.
@@ -81,23 +109,23 @@ nem criar usuários de demonstração.
 - Não foram executados seeders, comandos financeiros de escrita ou resets no banco da aplicação.
 - Navegador: registro, onboarding, conta com saldo, receita parcelada, detalhes, painel, tema e logout conferidos usando SQLite temporário fora do projeto.
 - Testes novos em `WorkspaceTest`: autenticação, recuperação, rollback de onboarding, isolamento, validação monetária, bloqueio de propriedades Livewire e renderização das telas.
-- `TitleDetailTest`: 23 novos testes de interface, incluindo replay de snapshot antigo, colisão de payload/UUID, principal restante, ajustes, estorno, PDF real e falhas, edição/baixa, recorrência e isolamento.
+- `TitleDetailTest`: 27 testes de interface, incluindo replay de snapshot antigo, colisão de payload/UUID, principal restante, ajustes, estorno, PDF real e falhas, edição/baixa, recorrência, isolamento, pré-requisitos de conta/forma ativa, prévia de total/formas e edição segura de recorrência.
 - Navegador desta etapa: baixa parcial de R$ 40,00 sobre R$ 100,00, reenvio sem duplicação, emissão de PDF, estorno com invalidação, edição de metadados e cancelamento após estorno. Banco e PDFs temporários fora do projeto.
+- Esta retomada confirmou baixa total/parcial e alertas de vencimento/atraso com dados isolados; atualização manual cria alertas deduplicados sem depender de `schedule:work`.
 - Testes PDF usam `DatabaseMigrations` somente em SQLite em memória, sem transação externa à emissão. Autorrelacionamentos temporários são desvinculados no teardown para permitir rollback do schema SQLite; MySQL não recebe essa limpeza.
 - A primeira regressão MySQL apresentou uma falha na espera de lock da numeração; a execução isolada e a repetição completa passaram. Mantida a asserção estrita de concorrência; observar estabilidade em execuções sob carga.
 
 ## Próxima Etapa
 
-Retomar por **contatos completos e preferências do usuário**, depois indicadores
-do painel e refinamento das operações já disponíveis.
+Retomar pelo **refinamento das operações disponíveis, responsividade e cobertura de
+integração**, mantendo as preferências e indicadores já entregues.
 
-1. Completar endereço/notas de contatos, arquivamento/restauração e preferências persistentes de tema/antecedência.
-2. Evoluir dashboard para indicadores por período, principal restante nos próximos compromissos e gráficos.
-3. Refinar formulários financeiros: resumo de total/forma, edição de configuração de recorrência quando permitida, preservação de rascunhos e reconciliação de pedidos após recarregar a página.
-4. Validar viewport mobile/acessibilidade e ampliar testes HTTP/Livewire equivalentes no MySQL.
-5. Implementar importação/exportação e alertas externos após consolidar os módulos.
-6. Configurar SMTP, fuso, scheduler e Redis; atualizar PHP para 8.3+ sem alterar dados.
-7. Ampliar carga, reconciliação de legados e recuperação explícita de PDFs ausentes/corrompidos/órfãos.
+1. Preservar rascunhos e reconciliar pedidos após recarregar a página, sem enfraquecer UUID/hash de idempotência.
+2. Validar viewport mobile/acessibilidade da dashboard e das operações financeiras, incluindo relatório longo e impressão.
+3. Ampliar testes HTTP/Livewire equivalentes no MySQL, incluindo combinações de filtros da dashboard.
+4. Implementar importação/exportação e alertas externos após consolidar os módulos.
+5. Configurar SMTP, fuso, scheduler e Redis; atualizar PHP para 8.3+ sem alterar dados.
+6. Ampliar carga, reconciliação de legados e recuperação explícita de PDFs ausentes/corrompidos/órfãos.
 
 Não refazer saldo, cadastros, edição, vencidos, seeders, estorno básico ou testes de
 concorrência já entregues, nem PDF e alertas internos. O estorno atual é integral por baixa,
@@ -143,6 +171,6 @@ O histórico completo está em `AI_DEV_LOG.md`.
 - Recuperação de senha funciona via Password Broker; mailer local `log` não entrega e-mails externos. Configurar SMTP antes de disponibilizar esse recurso aos usuários.
 - Baixa/estorno/edição/cancelamento e emissão de PDF já estão disponíveis na tela de detalhe. Recorrência pode ser configurada na criação; edição dessa configuração pela UI ainda pendente.
 - A baixa atual aceita data futura, conforme contrato existente do Service; PDF só pode ser emitido quando essa data chegar. Estorno não aceita data futura.
-- Tema alternável somente na página atual; persistência de preferências e validação dedicada em viewport mobile ainda pendentes.
+- Tema e antecedência são persistidos; a alteração de tema é aplicada nas próximas páginas abertas. Validação dedicada em viewport mobile continua pendente.
 - Alertas não são enviados para fora do banco; notificações antigas continuam como histórico após pagamento/cancelamento.
 - Não executar `migrate:fresh` ou `migrate:reset` em bancos com dados.

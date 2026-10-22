@@ -850,3 +850,246 @@ esse banco descartável, para permitir rollback do schema. Nenhuma limpeza globa
 Após falha de conexão, conferir o histórico antes de criar outro UUID. Chaves
 diferentes representam operações distintas. Baixa mantém contrato de data futura
 existente; emissão de PDF aguarda a data e estorno não aceita data futura.
+
+---
+
+## 2026-10-16 — Contatos, preferências e indicadores iniciais
+
+**Data:** 2026-10-16
+
+**Autor:** Agente de IA
+
+**O que foi feito:** A tela de contatos passou a editar endereço, bairro, cidade,
+UF, CEP e observações, além de arquivar/restaurar contatos com histórico preservado.
+Foi adicionada a rota `/preferencias` com tema claro/escuro e antecedência de alertas
+(0 a 365 dias) persistidos. O painel agora exibe totais mensais abertos/realizados, desconta estornos
+ocorridos no período e mostra o principal restante nos próximos compromissos.
+
+**Arquivos de código alterados:**
+- `app/Services/UserPreferencesService.php` (novo).
+- `app/Livewire/UserPreferences.php` (novo), `app/Livewire/Catalog.php` e `app/Http/Controllers/WorkspaceController.php`.
+- `resources/views/livewire/user-preferences.blade.php` e `resources/views/preferences.blade.php` (novos).
+- `resources/views/livewire/catalog.blade.php`, `resources/views/components/layout.blade.php`,
+  `resources/views/dashboard.blade.php` e `routes/web.php`.
+- `tests/Feature/WorkspaceTest.php` e assets compilados em `public/build`.
+
+**Documentos atualizados:** `docs/STATUS_DESENVOLVIMENTO.md`, `docs/README.md`,
+`docs/DATABASE.md`, `docs/DEVELOPER_GUIDE.md` e este log.
+
+**Impacto no banco:** Nenhuma migration, tabela, dependência ou configuração alterada.
+Foram usados os campos existentes de `contacts` e `users`; nenhuma operação de reset,
+seed ou escrita no MySQL da aplicação foi executada.
+
+**Verificações:**
+- SQLite: **306 testes / 1320 assertions**.
+- Testes de interface cobrem detalhes completos/arquivamento/restauração de contato,
+  preferências persistidas e painel com baixa parcial.
+- `php artisan view:cache`, Pint e `npm run build` aprovados.
+- MySQL executou 157/158 testes na passagem completa: a asserção estrita que observa
+  dois `LOCK WAIT` falhou por agendamento de processos. O cenário isolado passou
+  em seguida (1 teste / 11 assertions), sem reduzir a proteção de concorrência.
+
+**Pendências / próximos passos:**
+1. Resumo interativo de total/formas, edição de recorrência, rascunhos e reconciliação após reload.
+2. Gráficos e filtros de período no painel.
+3. Viewport mobile, acessibilidade e cobertura HTTP/Livewire correspondente no MySQL.
+4. Importação/exportação, alertas externos, SMTP, PHP 8.3+, Redis, scheduler/fuso e recuperação de legados/PDFs.
+
+---
+
+## 2026-10-16 — Operação de baixa e atualização imediata de alertas
+
+**Data:** 2026-10-16
+
+**Autor:** Agente de IA
+
+**O que foi feito:** Reproduzidos os fluxos de baixa e alertas internos. A baixa já
+funcionava pelo `TitleService`; o impedimento prático era a ausência de conta financeira
+ativa ou forma compatível para usuários novos. `TitleDetail::openPayment()` agora bloqueia
+o pedido antes de gerar UUID e mostra uma mensagem acionável. A geração de alertas também
+funcionava, mas dependia do scheduler diário que não está iniciado automaticamente no
+ambiente local. Foi adicionada atualização manual em `/notificacoes`, sempre limitada ao
+proprietário autenticado e idempotente por parcela/evento/vencimento.
+
+**Arquivos de código alterados:**
+- `app/Livewire/TitleDetail.php`.
+- `app/Http/Controllers/WorkspaceController.php` e `routes/web.php`.
+- `resources/views/notifications.blade.php`.
+- `tests/Feature/TitleDetailTest.php` e `tests/Feature/WorkspaceTest.php`.
+- Assets compilados em `public/build`.
+
+**Documentos atualizados:** `docs/STATUS_DESENVOLVIMENTO.md`, `docs/README.md`,
+`docs/DATABASE.md`, `docs/DEVELOPER_GUIDE.md` e este log.
+
+**Impacto no banco:** Nenhuma migration, tabela, dependência ou configuração de banco
+alterada. Nenhum reset, seed ou escrita no MySQL da aplicação foi executado.
+
+**Verificações:**
+- SQLite: **308 testes / 1338 assertions**.
+- Baixa total/parcial segue aprovada; novo teste cobre conta/forma inativa antes da abertura.
+- Atualização manual cria alertas de parcela próxima e vencida, sem duplicar na repetição.
+- Rotas, cache de views, Pint e build de produção aprovados.
+- MySQL focal de títulos e notificações: **70 testes / 389 assertions** aprovados.
+
+**Pendências / próximos passos:**
+1. Resumo interativo de total/formas, edição de recorrência, rascunhos e reconciliação após reload.
+2. Gráficos/filtros do painel, viewport mobile, acessibilidade e testes HTTP/Livewire MySQL.
+3. Importação/exportação, alertas externos, SMTP, scheduler/fuso, Redis, PHP 8.3+ e recuperação de legados/PDFs.
+
+---
+
+## 2026-10-22 — Conferência de baixa e edição segura de recorrência
+
+**Data:** 2026-10-22
+
+**Autor:** Agente de IA
+
+**O que foi feito:** A tela de detalhe passou a exibir uma prévia reativa do total da
+baixa, da soma das formas e da diferença entre ambos, calculada somente em centavos.
+O `TitleService` continua sendo a validação final da operação. A edição de título sem
+histórico agora permite ativar, alterar ou desativar recorrência mensal/anual; campos
+incompatíveis são normalizados pela interface e as proteções do Service para baixas e
+ciclos já gerados permanecem ativas.
+
+**Arquivos de código alterados:**
+- `app/Livewire/TitleDetail.php`.
+- `resources/views/livewire/title-detail.blade.php`.
+- `tests/Feature/TitleDetailTest.php`.
+- Assets compilados em `public/build`.
+
+**Documentos atualizados:** `docs/STATUS_DESENVOLVIMENTO.md`, `docs/README.md`,
+`docs/DATABASE.md`, `docs/DEVELOPER_GUIDE.md` e este log.
+
+**Impacto no banco:** Nenhuma migration, tabela, dependência ou configuração alterada.
+Nenhum reset, seed ou escrita no MySQL da aplicação foi executado.
+
+**Verificações:**
+- SQLite: **311 testes / 1362 assertions**.
+- `TitleDetailTest`: **27 testes / 197 assertions**.
+- MySQL focal do domínio de títulos: **52 testes / 215 assertions**.
+- Cache de views, Pint e build de produção aprovados.
+
+**Pendências / próximos passos:**
+1. Persistência de rascunhos e reconciliação de pedidos após reload.
+2. Gráficos/filtros do painel, viewport mobile, acessibilidade e testes HTTP/Livewire MySQL.
+3. Importação/exportação, alertas externos, SMTP, scheduler/fuso, Redis, PHP 8.3+ e recuperação de legados/PDFs.
+
+---
+
+## 2026-10-22 — Dashboard financeira e relatório imprimível refinado
+
+**Data:** 2026-10-22
+
+**Autor:** Agente de IA
+
+**O que foi feito:** Padronizados os campos de inclusão e edição de títulos, categorias
+e contas. Criada a dashboard financeira analítica com filtros compartilhados, KPIs,
+evolução diária, distribuição por categoria/forma e seleção múltipla de contatos. O
+relatório por agrupamento foi refinado para impressão/salvamento em PDF pelo navegador:
+cabeçalho de período, cards de indicadores, contexto dos filtros, agrupamentos sem a
+palavra “Nível”, subtotais destacados, total geral, paleta financeira e linhas zebra.
+
+**Arquivos de código alterados:**
+- `app/Services/FinancialAnalyticsService.php` e `app/Livewire/FinancialDashboard.php`.
+- `routes/web.php` e `resources/views/financial-dashboard.blade.php`.
+- `resources/views/livewire/financial-dashboard.blade.php`.
+- `resources/views/components/financial-report-group.blade.php`.
+- `resources/views/livewire/titles.blade.php`, `app/Livewire/Titles.php`,
+  `resources/views/livewire/catalog.blade.php` e `app/Livewire/Catalog.php`.
+- `resources/css/app.css`, testes de dashboard/MySQL e assets compilados em `public/build`.
+
+**Documentos atualizados:** `docs/STATUS_DESENVOLVIMENTO.md`, `docs/README.md`,
+`docs/DATABASE.md`, `docs/DEVELOPER_GUIDE.md` e este log.
+
+**Impacto no banco:** Nenhuma migration, tabela, dependência ou configuração foi alterada.
+A análise apenas lê baixas, estornos e formas existentes. O relatório não gera PDF
+persistido ou registros financeiros. Nenhum reset, seed ou escrita no MySQL da aplicação
+foi executado.
+
+**Verificações:**
+- SQLite completo: **321 testes / 1426 assertions**.
+- `FinancialDashboardTest`: **10 testes / 64 assertions**.
+- `MySqlFinancialAnalyticsTest` aprovado no banco exclusivo de testes.
+- Cache de views, Pint e build de produção aprovados.
+- Dashboard conferida no navegador com SQLite temporário fora do projeto.
+
+**Pendências / próximos passos:**
+1. Persistir rascunhos e reconciliar pedidos financeiros após recarregar a página.
+2. Validar responsividade, acessibilidade e impressão de relatório longo.
+3. Ampliar testes HTTP/Livewire MySQL, importação/exportação, alertas externos e configuração de produção.
+
+---
+
+## 2026-10-22 — Correção de impressão branca e identificação do relatório
+
+**Data:** 2026-10-22
+
+**Autor:** Agente de IA
+
+**O que foi feito:** Corrigido o CSS de impressão para impedir que o tema escuro do
+sistema deixe o fundo da página preto. O cabeçalho próprio do relatório deixou de ser
+ocultado pela regra global de navegação. Cards e parâmetros têm grade fixa e espaçamento
+adequado em PDF; labels foram reforçados. O rodapé agora identifica MoneyControl,
+usuário/e-mail que solicitou o relatório e data/hora de emissão.
+
+**Arquivos de código alterados:**
+- `resources/views/livewire/financial-dashboard.blade.php`.
+- `resources/css/app.css`.
+- `tests/Feature/FinancialDashboardTest.php`.
+- Assets compilados em `public/build`.
+
+**Documentos atualizados:** `docs/STATUS_DESENVOLVIMENTO.md`, `docs/README.md`,
+`docs/DEVELOPER_GUIDE.md` e este log.
+
+**Impacto no banco:** Nenhum. A impressão continua uma renderização local do navegador,
+sem criar PDF persistido, movimentações ou registros.
+
+**Verificações:**
+- `FinancialDashboardTest`: **10 testes / 73 assertions**.
+- Regressão SQLite completa: **321 testes / 1435 assertions**.
+- Cache de views, Pint e build de produção aprovados.
+
+**Pendências / próximos passos:**
+1. Validar impressão de relatório longo e responsividade em viewport menor.
+2. Persistir rascunhos e reconciliar pedidos financeiros após recarregar a página.
+3. Ampliar testes HTTP/Livewire MySQL, importação/exportação, alertas externos e configuração de produção.
+
+---
+
+## 2026-10-22 — Impressão visível, tabela de movimentos e gráfico interativo
+
+**Data:** 2026-10-22
+
+**Autor:** Agente de IA
+
+**O que foi feito:** Removida a regra de impressão que ocultava o ancestral Livewire
+do relatório e produzia PDF vazio. Controles usam uma classe explícita de ocultação,
+sem afetar o relatório. Grupos grandes podem atravessar páginas. A tabela de valores
+por data usa somente datas com eventos, incluindo baixa/estorno que se anulam;
+o gráfico continua com todos os dias do filtro e ganhou tooltip por posição, toque
+e navegação pelas setas do teclado.
+
+**Arquivos de código alterados:** `resources/css/app.css`,
+`resources/views/livewire/financial-dashboard.blade.php`,
+`resources/views/components/financial-timeline.blade.php`,
+`app/Services/FinancialAnalyticsService.php`,
+`tests/Feature/FinancialDashboardTest.php` e assets compilados.
+
+**Documentos atualizados:** `README.md`, `DATABASE.md`, `DEVELOPER_GUIDE.md`,
+`STATUS_DESENVOLVIMENTO.md` e este log, todos em `docs`.
+
+**Impacto no banco:** Nenhuma migration ou escrita na aplicação. Nenhuma dependência
+adicionada ao projeto. Testes de navegador usaram SQLite e ferramentas temporárias
+fora do projeto.
+
+**Verificações:**
+- SQLite: **324 testes / 1446 assertions**; focal: **13 testes / 84 assertions**.
+- Pint, cache de views e build aprovados.
+- Edge headless: tooltip, teclado, fundo branco, cabeçalho, tabela e ancestrais visíveis
+  em modo print; PDF temporário gerado com conteúdo.
+- MySQL não reexecutado nesta correção; cálculos monetários existentes preservados.
+
+**Pendências / próximos passos:**
+1. Ampliar testes de impressão com relatórios extensos e diferentes navegadores.
+2. Persistir rascunhos e reconciliar pedidos financeiros após recarregar a página.
+3. Ampliar cobertura MySQL da interface e ajustes de implantação.

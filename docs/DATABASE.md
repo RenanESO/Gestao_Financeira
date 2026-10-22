@@ -13,13 +13,15 @@ em memória; nenhum rollback ou reset foi executado no MySQL.
 Os onze Models financeiros, seus relacionamentos e casts estão implementados.
 `TitleService`, `RecurrenceService` e `Money` implementam criação/parcelas,
 baixas parciais/totais, idempotência, cancelamento e cálculo de recorrência.
-`FinancialAccountService` calcula saldo por conta/data; `CatalogService` valida cadastros
+`FinancialAccountService` calcula saldo por conta/data; `FinancialAnalyticsService` apenas
+consulta as baixas/estornos e respectivas formas para dashboard/relatório, sem criar
+tabela, PDF persistido ou novos movimentos; `CatalogService` valida cadastros
 e protege vínculos históricos. Edição controlada de títulos, rotina de vencidos e
 inicialização dos cadastros padrão estão implementadas. `SettlementReversalService`
 preserva a baixa original, reabre principal e invalida recibos existentes.
 PDF privado e notificações deduplicadas estão implementados; importação/exportação seguem pendentes.
 
-Validação: **303 testes / 1297 assertions em SQLite** e **158 testes / 1003 assertions em MySQL**.
+Validação: **324 testes / 1446 assertions em SQLite**; última regressão completa MySQL: **158 testes / 1003 assertions**.
 No MySQL foram conferidas 21 tabelas com InnoDB e `utf8mb4_unicode_ci`, 22 FKs restritivas,
 índices, precisão de `DECIMAL(15,2)`, enums, unicidade e consultas com proprietário indireto.
 Testes MySQL comuns fazem rollback; concorrência usa commits temporários e limpeza limitada
@@ -99,6 +101,7 @@ O skeleton também mantém as tabelas de infraestrutura `password_reset_tokens`,
 - `notifications` é uma tabela customizada; não corresponde ao esquema do canal `database` nativo do Laravel. O relacionamento implementado em `User` chama-se `financialNotifications()`, com `App\Models\Notification` e `unread()`.
 - Os Models financeiros estendem `FinancialModel`, com `OwnerScope` que restringe consultas ao usuário autenticado e retorna vazio sem identidade. Parcelas/baixas pertencem ao proprietário do título; formas pertencem ao proprietário do título da baixa.
 - `Contact` e `Title` usam `SoftDeletes`. Referências históricas a contatos, título pai e títulos de parcelas/baixas incluem registros excluídos logicamente sem remover o filtro de proprietário.
+- A tela de contatos usa os campos já existentes de endereço e observações, e o arquivamento/restauração apenas altera `deleted_at`. A página de preferências grava `users.theme` e `users.notification_days_before`; esta etapa não exigiu migration.
 
 ---
 
@@ -354,8 +357,8 @@ erDiagram
 | `email` | VARCHAR(255) | Não | — | E-mail (único) |
 | `password` | VARCHAR(255) | Não | — | Hash da senha |
 | `avatar` | VARCHAR(255) | Sim | NULL | Caminho da foto de perfil |
-| `theme` | ENUM | Não | `'dark'` | Tema da interface: `dark` ou `light` |
-| `notification_days_before` | INT UNSIGNED | Não | `7` | Dias de antecedência para alertas de vencimento |
+| `theme` | ENUM | Não | `'dark'` | Tema persistido da interface: `dark` ou `light` |
+| `notification_days_before` | INT UNSIGNED | Não | `7` | Dias de antecedência para alertas de vencimento; tela valida 0 a 365 |
 | `email_verified_at` | TIMESTAMP | Sim | NULL | Data de verificação do e-mail |
 | `remember_token` | VARCHAR(100) | Sim | NULL | Token de "lembrar-me" |
 | `created_at` | TIMESTAMP | Sim | NULL | Data de criação preenchida pelo Eloquent |

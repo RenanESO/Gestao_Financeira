@@ -25,6 +25,9 @@
             <h2 class="mb-5 text-lg font-semibold">{{ $type === 'receivable' ? 'Nova receita' : 'Nova despesa' }}</h2>
             <form wire:submit="save" class="space-y-4">
                 <label class="field">Descricao<input class="input w-full" wire:model="form.description" required maxlength="255"></label>
+                <label class="field">Documento<input class="input w-full" wire:model="form.document_number" maxlength="50"></label>
+                <label class="field">Referencia<input class="input w-full" wire:model="form.reference" maxlength="255"></label>
+                <label class="field">Observacoes<textarea class="textarea w-full" wire:model="form.notes" maxlength="10000"></textarea></label>
                 <label class="field">Valor total<input class="input w-full" inputmode="decimal" wire:model="form.original_value" required placeholder="150.00"><span class="muted">Use ponto decimal e nenhum separador de milhar.</span></label>
                 <label class="field">Parcelas<input class="input w-full" type="number" min="1" max="120" wire:model="form.installments_count" required></label>
                 <label class="field">Emissao<input class="input w-full" type="date" wire:model="form.issue_date" required></label>

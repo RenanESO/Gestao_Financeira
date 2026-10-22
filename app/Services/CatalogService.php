@@ -136,6 +136,9 @@ class CatalogService
                 $dados[$chave] = trim($valor);
             }
         }
+        if ($model === Contact::class && isset($dados['state'])) {
+            $dados['state'] = strtoupper($dados['state']);
+        }
         $dados = Validator::make($dados, $regras)->validate();
         if (array_key_exists('initial_balance', $dados)) {
             $dados['initial_balance'] = Money::signedDecimal(Money::signedCents($dados['initial_balance'], 'initial_balance'));

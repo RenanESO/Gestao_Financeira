@@ -46,6 +46,7 @@ class Titles extends Component
         $this->resetValidation();
         $this->form = [
             'description' => '', 'original_value' => '', 'installments_count' => 1,
+            'document_number' => '', 'reference' => '', 'notes' => '',
             'issue_date' => now()->toDateString(), 'due_date' => now()->toDateString(),
             'category_id' => '', 'contact_id' => '', 'financial_account_id' => '',
             'is_recurring' => false, 'recurrence_type' => 'monthly',
