@@ -87,7 +87,7 @@ trait ReceiptNotificationScenarios
     private function artifactTitle(array $dados = []): Title
     {
         return app(TitleService::class)->create(array_replace([
-            'title_type' => 'receivable', 'description' => 'Titulo <script>alert(1)</script>',
+            'title_type' => 'receivable', 'description' => 'Título <script>alert(1)</script>',
             'original_value' => '100.01', 'issue_date' => '2026-10-01', 'due_date' => '2026-10-23',
         ], $dados));
     }
@@ -96,7 +96,7 @@ trait ReceiptNotificationScenarios
     {
         try {
             $operacao();
-            $this->fail('Operacao deveria ser rejeitada.');
+            $this->fail('Operação deveria ser rejeitada.');
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey($campo, $exception->errors());
         }
@@ -153,7 +153,7 @@ trait ReceiptNotificationScenarios
         [, , $baixa] = $this->artifactFixture();
         $recibo = app(ReceiptService::class)->generate($baixa);
         app(SettlementReversalService::class)->reverse($baixa, [
-            'idempotency_key' => (string) Str::uuid(), 'reversal_date' => '2026-10-16', 'reason' => 'Correcao',
+            'idempotency_key' => (string) Str::uuid(), 'reversal_date' => '2026-10-16', 'reason' => 'Correção',
         ]);
         $this->artifactValidation(fn () => app(ReceiptService::class)->generate($baixa));
         $this->getJson(route('receipts.download', $recibo))->assertUnprocessable();
@@ -181,7 +181,7 @@ trait ReceiptNotificationScenarios
         Event::listen($evento, fn () => throw new RuntimeException('Falha de persistencia.'));
         try {
             app(ReceiptService::class)->generate($baixa);
-            $this->fail('Emissao deveria falhar.');
+            $this->fail('Emissão deveria falhar.');
         } catch (RuntimeException) {
             $this->assertSame(0, Receipt::count());
             $this->assertCount(0, Storage::disk('receipts')->allFiles());
@@ -279,7 +279,7 @@ trait ReceiptNotificationScenarios
         $criadas = 0;
         Event::listen($evento, function () use (&$criadas) {
             if (++$criadas === 2) {
-                throw new RuntimeException('Falha na segunda notificacao.');
+                throw new RuntimeException('Falha na segunda notificação.');
             }
         });
         try {

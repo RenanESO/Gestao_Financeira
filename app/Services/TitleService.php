@@ -53,7 +53,7 @@ class TitleService
         ];
         foreach (array_keys($dados) as $campo) {
             if (! in_array($campo, [...$metadados, ...$financeiros], true)) {
-                $this->invalid((string) $campo, 'Campo nao permitido na edicao do titulo.');
+                $this->invalid((string) $campo, 'Campo não permitido na edição do título.');
             }
         }
 
@@ -62,7 +62,7 @@ class TitleService
             $titulo = Title::whereKey($titulo->getKey())->lockForUpdate()->firstOrFail();
             Gate::authorize('update', $titulo);
             if ($titulo->status === 'cancelled') {
-                $this->invalid('status', 'Titulo cancelado nao pode ser editado.');
+                $this->invalid('status', 'Título cancelado não pode ser editado.');
             }
             $alteraFinanceiro = count(array_intersect(array_keys($dados), $financeiros)) > 0;
             if (! $alteraFinanceiro) {
@@ -78,12 +78,12 @@ class TitleService
             }
             if ($titulo->settlements()->lockForUpdate()->first() !== null
                 || ! in_array($titulo->status, ['pending', 'overdue'], true)) {
-                $this->invalid('status', 'Apos baixas, apenas descricao, documento, referencia e observacoes podem mudar.');
+                $this->invalid('status', 'Após baixas, apenas descrição, documento, referencia e observações podem mudar.');
             }
             $camposRecorrencia = ['is_recurring', 'recurrence_type', 'recurrence_day', 'recurrence_month'];
             if (count(array_intersect(array_keys($dados), $camposRecorrencia)) > 0
                 && ($titulo->parent_title_id !== null || $titulo->children()->withTrashed()->lockForUpdate()->first() !== null)) {
-                $this->invalid('recurrence_type', 'Recorrencia nao pode mudar em uma cadeia de ciclos ja criada.');
+                $this->invalid('recurrence_type', 'Recorrência não pode mudar em uma cadeia de ciclos já criada.');
             }
             $anteriores = $titulo->only([...$metadados, ...$financeiros, 'title_type', 'installments_count']);
             $anteriores['issue_date'] = $titulo->issue_date->toDateString();
@@ -97,7 +97,7 @@ class TitleService
                 if ($parcela->installment_number !== $indice + 1
                     || ! in_array($parcela->status, ['pending', 'overdue'], true)
                     || $parcela->settlements()->lockForUpdate()->first() !== null) {
-                    $this->invalid('installments', 'Parcela inconsistente ou com historico de baixa.');
+                    $this->invalid('installments', 'Parcela inconsistente ou com histórico de baixa.');
                 }
             }
             $links = array_intersect_key($normalizados, array_intersect_key($dados,
@@ -149,7 +149,7 @@ class TitleService
 
             if ($existente !== null) {
                 if (! hash_equals((string) $existente->request_hash, $hash)) {
-                    $this->invalid('idempotency_key', 'Esta chave ja foi usada para outra solicitacao.');
+                    $this->invalid('idempotency_key', 'Esta chave já foi usada para outra solicitação.');
                 }
 
                 return $existente->load('methods');
@@ -157,7 +157,7 @@ class TitleService
 
             if (! in_array($titulo->status, ['pending', 'overdue', 'partial'], true)
                 || ! in_array($parcela->status, ['pending', 'overdue'], true)) {
-                $this->invalid('status', 'Titulo ou parcela nao permite uma nova baixa.');
+                $this->invalid('status', 'Título ou parcela não permite uma nova baixa.');
             }
 
             $parcelas = $titulo->installments()->lockForUpdate()->get();
@@ -168,19 +168,19 @@ class TitleService
             foreach ($parcelas as $item) {
                 $valor = Money::cents($item->value);
                 if ($valor <= 0 || $item->status === 'cancelled') {
-                    $this->invalid('installments', 'Parcela invalida ou cancelada.');
+                    $this->invalid('installments', 'Parcela inválida ou cancelada.');
                 }
                 $somaParcelas += $valor;
                 Money::decimal($somaParcelas, 'installments');
             }
             if ($somaParcelas !== Money::cents($titulo->original_value)) {
-                $this->invalid('installments', 'A soma das parcelas nao confere com o titulo.');
+                $this->invalid('installments', 'A soma das parcelas não confere com o título.');
             }
 
             $principalBaixado = 0;
             foreach ($parcela->settlements()->active()->lockForUpdate()->get() as $baixa) {
                 if ((int) $baixa->title_id !== (int) $titulo->id) {
-                    $this->invalid('installments', 'Existe baixa vinculada a outro titulo.');
+                    $this->invalid('installments', 'Existe baixa vinculada a outro título.');
                 }
                 $principalBaixado += Money::cents($baixa->original_value);
             }
@@ -192,7 +192,7 @@ class TitleService
                 fn ($query) => $query->where('title_installment_id', $parcela->id))
                 ->orderByDesc('reversal_date')->lockForUpdate()->first();
             if ($ultimoEstorno !== null && $pedido['settlement_date'] < $ultimoEstorno->reversal_date->toDateString()) {
-                $this->invalid('settlement_date', 'Nova baixa nao pode anteceder o ultimo estorno da parcela.');
+                $this->invalid('settlement_date', 'Nova baixa não pode anteceder o ultimo estorno da parcela.');
             }
 
             $metodos = [];
@@ -201,12 +201,12 @@ class TitleService
                 $conta = FinancialAccount::whereKey($metodo['financial_account_id'])->lockForUpdate()->firstOrFail();
                 $tipo = $titulo->title_type === 'receivable' ? 'receipt' : 'payment';
                 if (! $forma->active || ! $conta->active || ! in_array($forma->type, [$tipo, 'both'], true)) {
-                    $this->invalid("payment_methods.$indice", 'Forma ou conta inativa, ou tipo incompativel.');
+                    $this->invalid("payment_methods.$indice", 'Forma ou conta inativa, ou tipo incompatível.');
                 }
                 $metodos[] = [$metodo, $forma, $conta];
             }
             if ($pedido['settlement_date'] < $titulo->issue_date->toDateString()) {
-                $this->invalid('settlement_date', 'A baixa nao pode ocorrer antes da emissao.');
+                $this->invalid('settlement_date', 'A baixa não pode ocorrer antes da emissão.');
             }
 
             $baixa = new TitleSettlement([
@@ -256,7 +256,7 @@ class TitleService
             $titulo = Title::whereKey($tituloId)->lockForUpdate()->firstOrFail();
             Gate::authorize('update', $titulo);
             if ($titulo->settlements()->active()->lockForUpdate()->first() !== null || $titulo->status === 'paid') {
-                $this->invalid('status', 'Titulo com baixas nao pode ser cancelado sem estorno.');
+                $this->invalid('status', 'Título com baixas não pode ser cancelado sem estorno.');
             }
             $titulo->installments()->update(['status' => 'cancelled']);
             $titulo->status = 'cancelled';
@@ -312,19 +312,19 @@ class TitleService
         $dados['is_recurring'] = (bool) ($dados['is_recurring'] ?? false);
         if ($dados['is_recurring']) {
             if ($quantidade !== 1 || empty($dados['recurrence_type']) || empty($dados['recurrence_day'])) {
-                $this->invalid('recurrence_type', 'Recorrencia exige tipo, dia e uma unica parcela.');
+                $this->invalid('recurrence_type', 'Recorrência exige tipo, dia e uma única parcela.');
             }
             $vencimento = CarbonImmutable::parse($dados['due_date']);
             if ($vencimento->day !== min((int) $dados['recurrence_day'], $vencimento->daysInMonth)
                 || ($dados['recurrence_type'] === 'yearly'
                     && (int) ($dados['recurrence_month'] ?? 0) !== $vencimento->month)) {
-                $this->invalid('due_date', 'Vencimento deve corresponder ao dia e mes da recorrencia.');
+                $this->invalid('due_date', 'Vencimento deve corresponder ao dia e mês da recorrência.');
             }
         } elseif (! empty($dados['recurrence_type']) || ! empty($dados['recurrence_day']) || ! empty($dados['recurrence_month'])) {
-            $this->invalid('recurrence_type', 'Nao informe recorrencia para um titulo nao recorrente.');
+            $this->invalid('recurrence_type', 'Não informe recorrência para um título não recorrente.');
         }
         if (($dados['recurrence_type'] ?? null) === 'monthly' && ! empty($dados['recurrence_month'])) {
-            $this->invalid('recurrence_month', 'Recorrencia mensal nao utiliza mes fixo.');
+            $this->invalid('recurrence_month', 'Recorrência mensal não utiliza mês fixo.');
         }
 
         return $dados;
@@ -374,7 +374,7 @@ class TitleService
                     }
                     $registro = $consulta->lockForUpdate()->firstOrFail();
                     if (! $historico && (! $registro->active || ($tipo && ! in_array($registro->type, [$tipo, 'both'], true)))) {
-                        $this->invalid($chave, 'Cadastro inativo ou tipo incompativel com o titulo.');
+                        $this->invalid($chave, 'Cadastro inativo ou tipo incompatível com o título.');
                     }
                 }
                 $titulo->$relacao()->associate($registro);
@@ -394,7 +394,7 @@ class TitleService
             }
         }
         if ($ultimo >= 9999999999999999) {
-            $this->invalid('title_number', 'Limite de numeracao atingido.');
+            $this->invalid('title_number', 'Limite de numeração atingido.');
         }
 
         return sprintf('%s-%04d', $prefixo, $ultimo + 1);
@@ -419,7 +419,7 @@ class TitleService
             'payment_methods.*.value' => ['required'],
         ])->validate();
         if ($dados['generate_receipt'] ?? false) {
-            $this->invalid('generate_receipt', 'Emita o recibo separadamente pelo ReceiptService apos confirmar a baixa.');
+            $this->invalid('generate_receipt', 'Emita o recibo separadamente pelo ReceiptService após confirmar a baixa.');
         }
         $principal = Money::cents($dados['original_value'], 'original_value');
         $desconto = Money::cents($dados['discount'] ?? '0', 'discount');
@@ -427,11 +427,11 @@ class TitleService
         $multa = Money::cents($dados['fine'] ?? '0', 'fine');
         $total = $principal - $desconto + $juros + $multa;
         if ($principal <= 0 || $desconto > $principal || $total <= 0) {
-            $this->invalid('original_value', 'Principal e total devem ser positivos; desconto nao pode exceder o principal.');
+            $this->invalid('original_value', 'Principal e total devem ser positivos; desconto não pode exceder o principal.');
         }
         Money::decimal($total, 'total_value');
         if (array_key_exists('total_value', $dados) && Money::cents($dados['total_value'], 'total_value') !== $total) {
-            $this->invalid('total_value', 'Total nao confere com principal, desconto, juros e multa.');
+            $this->invalid('total_value', 'Total não confere com principal, desconto, juros e multa.');
         }
         $soma = 0;
         $metodos = [];
@@ -464,7 +464,7 @@ class TitleService
         $vencimento = $this->recurrence->nextDueDate($titulo);
         $raiz = $titulo->parent_title_id ? Title::withTrashed()->lockForUpdate()->findOrFail($titulo->parent_title_id) : $titulo;
         if ($raiz->parent_title_id !== null) {
-            $this->invalid('parent_title_id', 'A recorrencia deve apontar diretamente para a raiz.');
+            $this->invalid('parent_title_id', 'A recorrência deve apontar diretamente para a raiz.');
         }
         $dados = $titulo->only([
             'title_type', 'description', 'original_value', 'contact_id', 'category_id', 'financial_account_id',

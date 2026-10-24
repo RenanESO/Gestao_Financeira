@@ -95,7 +95,7 @@ class AuthController extends Controller
             event(new PasswordReset($user));
         });
         if ($status !== Password::PASSWORD_RESET) {
-            throw ValidationException::withMessages(['email' => 'Link invalido ou expirado. Solicite um novo link.']);
+            throw ValidationException::withMessages(['email' => 'Link inválido ou expirado. Solicite um novo link.']);
         }
 
         return redirect()->route('login')->with('status', 'Senha redefinida. Entre com sua nova senha.');

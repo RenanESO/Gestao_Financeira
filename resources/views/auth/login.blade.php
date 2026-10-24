@@ -3,7 +3,7 @@
         <div class="panel">
             <p class="eyebrow mb-3">Bem-vindo de volta</p>
             <h1 class="page-title mb-2">Acesse sua conta</h1>
-            <p class="muted mb-7">Seu financeiro esta aqui.</p>
+            <p class="muted mb-7">Seu financeiro está aqui.</p>
             <x-feedback />
             <form action="{{ route('login.store') }}" method="POST" class="space-y-5">
                 @csrf

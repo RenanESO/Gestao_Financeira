@@ -55,7 +55,7 @@ class FinancialAnalyticsService
         }
         $filters = Validator::make($filters, $rules)->validate();
         if (CarbonImmutable::parse($filters['start'])->diffInDays(CarbonImmutable::parse($filters['end'])) > 1830) {
-            throw ValidationException::withMessages(['end' => 'Selecione um periodo de ate cinco anos.']);
+            throw ValidationException::withMessages(['end' => 'Selecione um período de até cinco anos.']);
         }
 
         // O mesmo lock das operacoes financeiras garante uma leitura coerente entre baixas e estornos.
@@ -92,7 +92,7 @@ class FinancialAnalyticsService
                     'c.id as category_id', 'c.name as category', 'ct.id as contact_id', 'ct.name as contact',
                 ])->selectRaw('CAST(m.value AS CHAR) as value')->orderBy('m.id')->limit(10001)->get();
             if ($query->count() > 10000) {
-                throw ValidationException::withMessages(['start' => 'Mais de 10.000 formas no periodo. Restrinja os filtros para gerar a analise completa.']);
+                throw ValidationException::withMessages(['start' => 'Mais de 10.000 formas no período. Restrinja os filtros para gerar a análise completa.']);
             }
             $rows = [];
             foreach ($query as $movement) {
@@ -141,8 +141,90 @@ class FinancialAnalyticsService
                 'movement_days' => array_intersect_key($daily, $movementDates),
                 'methods' => $this->distribution($rows, 'method'),
                 'groups' => $this->groups($rows, $filters['grouping']),
+                'accounts' => $this->accountBalances($filters, $userId, array_keys($daily)),
             ];
         }, 3);
+    }
+
+    /**
+     * Saldo realizado de cada conta ao fim de cada dia do periodo: abertura + recebimentos - pagamentos,
+     * com estornos na propria data. A abertura inclui o saldo inicial e os movimentos anteriores
+     * que correspondem aos mesmos filtros de categoria, forma, contato e conta da analise.
+     */
+    private function accountBalances(array $filters, int $userId, array $dates): array
+    {
+        $accounts = FinancialAccount::where('user_id', $userId)
+            ->when($filters['excluded_accounts'], fn ($q) => $q->whereNotIn('id', $filters['excluded_accounts']))
+            ->orderBy('name')->get(['id', 'name', 'color', 'active', 'initial_balance']);
+        if ($accounts->isEmpty()) {
+            return [];
+        }
+        $opening = [];
+        foreach ($accounts as $account) {
+            $opening[$account->id] = Money::signedCents($account->initial_balance, 'initial_balance');
+        }
+        $deltas = [];
+        $movements = DB::table('title_settlement_methods as m')
+            ->join('title_settlements as s', 's.id', '=', 'm.settlement_id')
+            ->join('titles as t', 't.id', '=', 's.title_id')
+            ->leftJoin('settlement_reversals as r', 'r.settlement_id', '=', 's.id')
+            ->where('t.user_id', $userId)
+            ->whereIn('m.financial_account_id', $accounts->modelKeys())
+            ->when($filters['excluded_categories'], fn ($q) => $q->where(fn ($q) => $q
+                ->whereNull('t.category_id')->orWhereNotIn('t.category_id', $filters['excluded_categories'])))
+            ->when($filters['excluded_methods'], fn ($q) => $q->whereNotIn('m.payment_type_id', $filters['excluded_methods']))
+            ->when($filters['contacts'], fn ($q) => $q->whereIn('t.contact_id', $filters['contacts']))
+            ->whereDate('s.settlement_date', '<=', $filters['end'])
+            ->select(['m.financial_account_id as account_id', 't.title_type', 's.settlement_date', 'r.reversal_date'])
+            ->selectRaw('CAST(m.value AS CHAR) as value')->cursor();
+        foreach ($movements as $movement) {
+            $amount = Money::cents($movement->value) * ($movement->title_type === 'receivable' ? 1 : -1);
+            foreach (['settlement_date' => 1, 'reversal_date' => -1] as $field => $sign) {
+                if ($movement->$field === null) {
+                    continue;
+                }
+                $date = CarbonImmutable::parse($movement->$field)->toDateString();
+                if ($date > $filters['end']) {
+                    continue;
+                }
+                if ($date < $filters['start']) {
+                    $opening[$movement->account_id] += $amount * $sign;
+                } else {
+                    $deltas[$movement->account_id][$date] = ($deltas[$movement->account_id][$date] ?? 0) + $amount * $sign;
+                }
+            }
+        }
+
+        // Cor escolhida pelo usuario; se repetida, recebe o proximo tom livre da paleta categorica.
+        $palette = ['#2a78d6', '#eb6834', '#1baf7a', '#eda100', '#e87ba4', '#008300', '#6250d6', '#e34948'];
+        $used = [];
+        $series = [];
+        foreach ($accounts as $account) {
+            // Conta inativa so sai do grafico quando nao movimentou no periodo e esta zerada.
+            if (! $account->active && empty($deltas[$account->id]) && $opening[$account->id] === 0) {
+                continue;
+            }
+            $color = strtolower((string) $account->color);
+            if (! preg_match('/^#[0-9a-f]{6}$/', $color) || in_array($color, $used, true)) {
+                $color = collect($palette)->first(fn ($c) => ! in_array($c, $used, true)) ?? $color;
+            }
+            $used[] = $color;
+            $balance = $opening[$account->id];
+            Money::signedDecimal($balance, 'opening');
+            $values = [];
+            foreach ($dates as $date) {
+                $balance += $deltas[$account->id][$date] ?? 0;
+                Money::signedDecimal($balance, 'balance');
+                $values[] = $balance;
+            }
+            Money::signedDecimal($balance, 'balance');
+            $series[] = [
+                'id' => $account->id, 'name' => $account->name, 'color' => $color,
+                'opening' => $opening[$account->id], 'values' => $values,
+            ];
+        }
+
+        return $series;
     }
 
     public function totals(array $rows): array
@@ -169,7 +251,11 @@ class FinancialAnalyticsService
             $groups[$id]['expense'] += $row['expense'];
         }
 
-        return array_values($groups);
+        // Maior participacao primeiro; empate por nome para uma ordem estavel.
+        usort($groups, fn ($a, $b) => [abs($b['income']) + abs($b['expense']), $a['label']]
+            <=> [abs($a['income']) + abs($a['expense']), $b['label']]);
+
+        return $groups;
     }
 
     private function groups(array $rows, string $grouping): array

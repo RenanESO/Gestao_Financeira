@@ -1093,3 +1093,367 @@ fora do projeto.
 1. Ampliar testes de impressão com relatórios extensos e diferentes navegadores.
 2. Persistir rascunhos e reconciliar pedidos financeiros após recarregar a página.
 3. Ampliar cobertura MySQL da interface e ajustes de implantação.
+
+---
+
+## 2026-10-23 — Eixos nos gráficos, saldo por conta e revisão completa da dashboard
+
+**Data:** 2026-10-23
+
+**Autor:** Agente de IA (Claude)
+
+**O que foi feito:**
+- Gráfico de entradas e saídas reescrito com eixos X (até 7 datas) e Y (escala redonda com
+  rótulos compactos em R$/mil/mi, linha do zero), grade discreta, área suave, legenda e
+  tooltip temático com saldo do dia. O tooltip acompanha o ponto mais alto da data.
+- Novo gráfico **Histórico de saldo por conta**: uma linha por conta financeira com saldo
+  diário (saldo inicial + recebimentos − pagamentos, estorno na própria data), mini cards
+  de seleção (todos marcados por padrão) e escala Y recalculada no navegador.
+- `App\Support\ChartAxis` compartilha posição X e rótulos de data entre os gráficos.
+- Revisão da página inteira, com correções de lógica:
+  1. `toggle()` aplicava datas e agrupamento pendentes, contrariando "datas entram em vigor
+     ao aplicar", e uma data pendente inválida bloqueava todos os chips. Agora reutiliza
+     as datas/agrupamento já aplicados.
+  2. Cada ação executava `analyze()` duas vezes (ação + `render()`), e a busca de contatos
+     refazia a análise a cada tecla. Resultado reaproveitado na requisição; busca filtrada
+     no navegador.
+  3. Conta inativa sem movimento no período, mas com saldo, sumia do gráfico de saldo.
+  4. Rótulo "Saldo final do período" do relatório induzia a ler saldo de conta; renomeado
+     para "Saldo líquido do período".
+  5. Texto do topo dizia que nada usava saldo inicial, o que deixou de valer com o
+     novo gráfico; textos revisados.
+  6. Datas cruas `Y-m-d` na tabela e no período aplicado; distribuições sem ordem;
+     participações pequenas exibidas como 0%.
+- Layout padronizado: cabeçalho com período aplicado e indicador de carregamento, seções com
+  título/ícone/subtítulo, chips com ícone de estado e contagem, KPIs com ícone e acento de
+  cor, tabela por data com saldo, distribuições com barras finas, painel do relatório
+  com ícones. Gráficos com largura mínima e rolagem horizontal em telas estreitas.
+
+**Arquivos de código alterados:**
+- `app/Livewire/FinancialDashboard.php`
+- `app/Services/FinancialAnalyticsService.php`
+- `app/Support/ChartAxis.php` (novo)
+- `resources/views/livewire/financial-dashboard.blade.php`
+- `resources/views/components/financial-timeline.blade.php`
+- `resources/views/components/account-balance-chart.blade.php` (novo)
+- `resources/css/app.css`
+- `tests/Feature/FinancialDashboardTest.php`
+- Assets compilados em `public/build`.
+
+**Documentos atualizados:** `docs/DEVELOPER_GUIDE.md`, `docs/README.md`,
+`docs/DATABASE.md`, `docs/STATUS_DESENVOLVIMENTO.md` e este log.
+
+**Impacto no banco:** Nenhum. Sem migrations; apenas leitura adicional de
+`financial_accounts.initial_balance` e das formas de baixa/estornos para o saldo diário.
+
+**Verificações:**
+- SQLite: **327 testes / 1462 assertions**; `FinancialDashboardTest`: **16 testes / 100 assertions**.
+- Pint, `view:cache` e build de produção aprovados.
+- Edge headless com SQLite temporário fora do projeto: temas claro/escuro em 1280px e
+  layout em 375px conferidos. MySQL não reexecutado.
+
+**Pendências / próximos passos:**
+1. Reexecutar `MySqlFinancialAnalyticsTest` e incluir caso MySQL para `accounts`.
+2. Avaliar desempenho do histórico de saldo com muitos anos de movimentos (consulta usa
+   todo o histórico até a data final; considerar saldo de abertura materializado).
+3. Validar o gráfico de saldo e os mini cards com leitor de tela e em dispositivos reais.
+
+---
+
+## 2026-10-23 — Atalhos de arraste, confirmações, mensagens com ícones e auditoria de SoftDelete
+
+**Data:** 2026-10-23
+
+**Autor:** Agente de IA (Claude)
+
+**O que foi feito:** implementação das diretrizes de `Implementacaoes_Correcoes.md`.
+- **Atalhos de arraste** (`<x-swipe-row>` + `resources/js/swipe-row.js`, Pointer Events via
+  Alpine do Livewire): em títulos, direita inicia a baixa (abre o formulário existente em
+  `/titulos/{id}?acao=baixa`) e esquerda cancela (sem baixa ativa, via modal) ou abre o estorno
+  da última baixa ativa (`?acao=estorno`, motivo/data obrigatórios). Em cadastros, direita
+  edita e esquerda pede exclusão. Limite mínimo, cancelamento ao voltar/Esc, bloqueio em
+  rolagem vertical e controles, indicador visual por ação e "Processando operação...".
+  O servidor sempre recarrega o registro e revalida o estado; botões equivalentes mantidos.
+- **Confirmação obrigatória** (`App\Livewire\Concerns\ConfirmsOperations` + `<x-confirm-modal>`,
+  modal MaryUI): estorno ("Estornar baixa?"), cancelamento ("Confirmar cancelamento?"),
+  exclusão ("Confirmar exclusão?"), baixa e descarte de pedido. O pedido fica em propriedade
+  `#[Locked]`; os métodos da operação consomem a confirmação antes do Service, então gesto ou
+  chamada direta não gravam nada. `wire:confirm` nativo foi removido dessas telas.
+- **Mensagens** (`App\Support\Feedback` + `<x-feedback>`): padrão "… com sucesso!" com ícone
+  por operação (inserção, alteração, exclusão, baixa, estorno, cancelamento, restauração...),
+  tons de sucesso/informação/aviso/erro, fechamento manual e automático, `role`/`aria-live`
+  e ícones `aria-hidden`. Resumo de erros com ícone; erro de operação confirmada aparece na
+  notificação. O toast do MaryUI não foi usado (oculta ícone no mobile e não cobre redirects).
+- **Tutorial**: `<x-gesture-help context="titles|catalog">` — botão flutuante no canto inferior
+  direito e modal contextual com demonstração animada dos gestos (respeita movimento reduzido).
+- **Exclusão lógica dos cadastros**: `deleted_at` em categorias, contas e formas;
+  `CatalogService::delete()/restore()/blocksDeletion()`; Policies; relacionamentos históricos com
+  `withTrashed()`; inicialização de padrões não recria excluídos. Cadastros com vínculos
+  financeiros devem ser desativados.
+- **Auditoria de SoftDelete** documentada em `docs/AUDITORIA_SOFTDELETE.md`.
+- **Listagens** de títulos e cadastros redesenhadas no padrão da dashboard (seções com ícone,
+  selos de status com ícone, layout por container query, pois o formulário lateral estreita a lista).
+- **Correção:** a variante `dark:` do Tailwind seguia o tema do sistema operacional e não o
+  `data-theme` do usuário (afetava também os KPIs da dashboard); redefinida em `app.css`.
+- **Correção de usabilidade:** os botões de envio dos formulários de baixa/estorno passaram a
+  "Revisar e confirmar …", pois o botão do histórico com o mesmo rótulo causava ambiguidade.
+
+**Arquivos de código alterados:**
+- `app/Livewire/Concerns/ConfirmsOperations.php` (novo), `app/Support/Feedback.php` (novo)
+- `app/Livewire/Titles.php`, `app/Livewire/TitleDetail.php`, `app/Livewire/Catalog.php`, `app/Livewire/UserPreferences.php`
+- `app/Http/Controllers/WorkspaceController.php`, `app/Policies/FinancialRecordPolicy.php`
+- `app/Services/CatalogService.php`, `app/Services/FinancialDefaultsService.php`, `app/Support/Display.php`
+- `app/Models/Category.php`, `FinancialAccount.php`, `PaymentType.php`, `Title.php`, `TitleInstallment.php`, `TitleSettlementMethod.php`
+- `database/migrations/2026_10_23_000001_add_soft_deletes_to_catalog_tables.php` (nova)
+- `resources/js/app.js`, `resources/js/swipe-row.js` (novo), `resources/css/app.css`
+- `resources/views/components/{swipe-row,confirm-modal,gesture-help}.blade.php` (novos), `feedback.blade.php`
+- `resources/views/livewire/{titles,catalog,title-detail}.blade.php`, `resources/views/title.blade.php`
+- `tests/Feature/InteractionShortcutsTest.php` (novo), `TitleDetailTest.php`, `WorkspaceTest.php`, `MigrationLifecycleTest.php`
+- Assets compilados em `public/build`.
+
+**Documentos atualizados:** `docs/AUDITORIA_SOFTDELETE.md` (novo), `docs/DEVELOPER_GUIDE.md`,
+`docs/DATABASE.md`, `docs/README.md`, `docs/STATUS_DESENVOLVIMENTO.md` e este log.
+
+**Impacto no banco:** migration aditiva `2026_10_23_000001` (`deleted_at` nulo em
+`categories`, `financial_accounts`, `payment_types`), aplicada no MySQL local
+`gestao_financeira` sem alterar dados. Nenhuma dependência composer/npm adicionada.
+
+**Verificações:**
+- SQLite: **348 testes / 1648 assertions**; `InteractionShortcutsTest`: 21 testes / 177 assertions.
+- Testes existentes atualizados para o novo fluxo: baixa/estorno/cancelamento agora passam por
+  `request*`/`confirmCancel` + `confirmOperation`; o teste de snapshot antigo por HTTP captura o
+  estado com a confirmação pendente, mantendo a verificação de idempotência/hash do Service.
+- Pint, `view:cache` e build de produção aprovados.
+- Edge headless via CDP (SQLite temporário fora do projeto), temas claro e escuro: 22 verificações
+  — arraste curto sem efeito, modal, cancelar/Esc sem alterar dados, toasts, motivo em título
+  cancelado, baixa e estorno pelos gestos, tutorial com Esc, edição/exclusão em cadastros, toque
+  em 375px, rolagem vertical sem disparo, sem rolagem horizontal e console sem erros.
+- MySQL não reexecutado: `gestao_financeira_testing` não existe nesta máquina.
+
+**Pendências / próximos passos:**
+1. Recriar `gestao_financeira_testing`, aplicar as migrations e reexecutar `phpunit.mysql.xml`.
+2. Validar gestos/modais com leitor de tela e em dispositivos reais (iOS/Android).
+3. Padronizar a acentuação dos textos antigos da interface (os novos já usam acentos).
+4. Avaliar política de exclusão de conta de usuário e de títulos (ver auditoria, seção 5).
+
+---
+
+## 2026-10-23 — Detalhe do título: parcelas, histórico de baixas e vencimento na baixa
+
+**Data:** 2026-10-23
+
+**Autor:** Agente de IA (Claude)
+
+**O que foi feito:**
+- Tabela de parcelas: "Principal original" renomeada para **Valor da parcela**. A coluna
+  "Principal restante" (valor − principal das baixas ativas) só era útil em parcelas
+  parcialmente baixadas; foi substituída por **Data da baixa** (uma data por baixa ativa,
+  estornadas excluídas, "—" sem baixa). O restante passou a aparecer sob o status apenas
+  quando a parcela está parcial; o cálculo continua preenchendo "Principal a baixar".
+- Histórico de baixas: título `Título/Parcela · Data da baixa · Valor da parcela`; abaixo
+  `Baixa #ID / Vencimento / Desconto / Juros / Multa`; e uma linha por forma
+  `Forma · Conta · Valor pago`. O principal da baixa deixou de aparecer nessa linha.
+- Formulário de baixa: campo informativo somente leitura **Vencimento da parcela**, com
+  indicação "Vencida há N dia(s)", "Vence hoje" ou "Vence em N dia(s)".
+
+**Arquivos de código alterados:**
+- `resources/views/livewire/title-detail.blade.php`
+- `tests/Feature/TitleDetailTest.php` (novo teste de colunas, histórico, vencimento e estorno)
+
+**Documentos atualizados:** `docs/DEVELOPER_GUIDE.md`, `docs/STATUS_DESENVOLVIMENTO.md`,
+`docs/DATABASE.md` e `docs/README.md` (contagem de testes) e este log.
+
+**Impacto no banco:** Nenhum.
+
+**Verificações:**
+- SQLite: **349 testes / 1665 assertions**; Pint e `view:cache` aprovados.
+- Edge headless (SQLite temporário fora do projeto): detalhe com baixa parcial e formulário
+  de baixa conferidos, sem erros de console.
+
+**Pendências / próximos passos:**
+1. Confirmar se o valor da baixa (principal/total pago) deve voltar ao título do histórico em
+   baixas parciais, já que o título mostra o valor da parcela.
+
+---
+
+## 2026-10-23 — Ordem do histórico, sugestão de valor nas formas e inclusão de recorrentes
+
+**Data:** 2026-10-23
+
+**Autor:** Agente de IA (Claude)
+
+**O que foi feito:**
+- Histórico de baixas ordenado pelo número da parcela (crescente); na mesma parcela, por data e ID
+  da baixa; baixas legadas sem parcela por último.
+- "Adicionar forma" preenche o valor da nova forma com o que falta para o total esperado
+  (total − formas informadas). Vazio quando nada falta. A soma exata continua validada no Service.
+- Inclusão de título recorrente: **Parcelas** desabilitado (fixo em 1) e **Primeiro vencimento**
+  desabilitado, com prévia calculada por `RecurrenceService::firstDueDate()` — primeira data ≥
+  emissão com o dia (e mês, na anual) configurado, limitada ao fim do mês. O cálculo é refeito
+  no servidor ao salvar; valores digitados antes são ignorados. Decisão: o vencimento continua
+  existindo (é a data do primeiro ciclo); para registrar um ciclo cujo dia já passou, informa-se
+  uma emissão anterior.
+- **Correção encontrada no navegador:** ao marcar "Título recorrente", o morph do Livewire
+  reaproveitava campos pela posição e o "Dia previsto" passava a gravar na data de emissão
+  (campo apagado). Os blocos recebem `wire:key` próprios; o formulário de edição do título,
+  sujeito ao mesmo padrão (campos de recorrência antes dos selects), recebeu a mesma proteção.
+
+**Arquivos de código alterados:**
+- `app/Services/RecurrenceService.php` (`firstDueDate()`)
+- `app/Livewire/Titles.php`, `app/Livewire/TitleDetail.php`
+- `resources/views/livewire/titles.blade.php`, `resources/views/livewire/title-detail.blade.php`
+- `tests/Unit/RecurrenceServiceTest.php`, `tests/Feature/TitleDetailTest.php`
+
+**Documentos atualizados:** `docs/DEVELOPER_GUIDE.md`, `docs/STATUS_DESENVOLVIMENTO.md`,
+`docs/README.md`, `docs/DATABASE.md` (contagem de testes) e este log.
+
+**Impacto no banco:** Nenhum.
+
+**Verificações:**
+- SQLite: **366 testes / 1705 assertions**; Pint e build aprovados.
+- Edge headless (SQLite temporário fora do projeto): campos desabilitados com prévia
+  "05/11/2026" para dia 5 com emissão 23/10/2026; nova forma preenchida com R$ 500,00 após
+  R$ 1.000,00 informados em título de R$ 1.500,00; console sem erros.
+- Observação: a linha `Baixa #ID … Juros … / Multa` da view foi alterada fora desta entrega
+  (separadores "·") e mantém um "/" antes de Multa; não foi modificada aqui.
+
+**Pendências / próximos passos:**
+1. Confirmar o separador final da linha de detalhe da baixa ("/" ou "·").
+2. Avaliar se a edição de títulos recorrentes (sem histórico) também deve calcular o vencimento.
+
+---
+
+## 2026-10-24 — Saldo por conta com filtros globais e revisão de português brasileiro
+
+**Data:** 2026-10-24
+
+**Autor:** Agente de IA
+
+**O que foi feito:**
+- Histórico diário de saldo por conta acompanha os filtros principais de período, conta,
+  categoria, forma e contato. Os movimentos anteriores usados na abertura recebem as
+  mesmas restrições; o saldo inicial permanece preservado.
+- Estornos continuam na própria data, com valores em centavos. Abertura e cada saldo
+  diário são validados nos limites de `Money`.
+- A tela esclarece que filtros restritivos produzem saldo analítico, não saldo bancário
+  completo. Os mini cards continuam controlando somente a visibilidade local das linhas.
+- Revisados textos próprios de apresentação, autenticação, navegação, painel, cadastros,
+  títulos, baixas, preferências, notificações, relatório e recibos, além de mensagens
+  financeiras. Corrigidos acentos e frases como "Referência", "Conferência",
+  "Salvar alterações" e "a exclusão é lógica".
+- Ampliados testes de abertura, filtros individuais/combinados, contatos múltiplos,
+  limites de datas, saldo inicial e estorno de baixa anterior ao período.
+- Corrigida a asserção de texto no replay HTTP Livewire: compara o HTML decodificado,
+  não o JSON bruto com Unicode escapado. A idempotência continua validada.
+
+**Arquivos de código alterados:**
+- `app/Services/FinancialAnalyticsService.php`
+- Views em `resources/views` (autenticação, componentes, telas e recibo)
+- Mensagens em `app/Services`, `app/Livewire/Catalog.php`, `app/Livewire/TitleDetail.php`,
+  `app/Http/Controllers/AuthController.php`, `app/Support/Money.php` e comandos financeiros
+- Expectativas textuais dos testes em `tests/Concerns`, `tests/Feature` e `tests/MySql`
+- `tests/Feature/FinancialDashboardTest.php`, `tests/Feature/TitleDetailTest.php`,
+  `tests/MySql/MySqlFinancialAnalyticsTest.php`
+
+**Documentos atualizados:** `docs/README.md`, `docs/DEVELOPER_GUIDE.md`,
+`docs/DATABASE.md`, `docs/STATUS_DESENVOLVIMENTO.md` e este log.
+
+**Impacto no banco:** Nenhuma nova migration nem alteração de registros financeiros.
+Para validar MySQL, aplicada somente a migration aditiva já existente
+`2026_10_23_000001_add_soft_deletes_to_catalog_tables` em `gestao_financeira_testing`.
+Não executados reset, truncate ou limpeza global; fixtures MySQL usam rollback.
+O banco da aplicação não foi alterado nesta entrega.
+
+**Verificações:**
+- SQLite final: **368 testes / 1730 assertions**.
+- Dashboard focal: **18 testes / 125 assertions**.
+- MySQL analytics: **1 teste / 18 assertions**, incluindo saldo filtrado e precisão.
+- Pint: **44 arquivos**; build Vite, `view:cache` e `git diff --check` aprovados.
+- A primeira regressão reutilizou o cache de configuração da aplicação e falhou por
+  ambiente/CSRF. A conexão MySQL foi inicialmente interrompida pela trava de nome de
+  banco, antes das fixtures. Execuções finais apontaram `APP_CONFIG_CACHE` para um
+  caminho temporário inexistente, preservando o cache original.
+- No banco MySQL de testes faltava a migration anterior de SoftDelete; após aplicação
+  aditiva, o focal passou.
+- Navegador não reexecutado nesta entrega; sem nova alegação de validação visual.
+
+**Pendências / próximos passos:**
+1. Reexecutar a suíte completa MySQL após a migration anterior, com configuração isolada.
+2. Validar visualmente filtros e gráficos em dispositivos reais e com leitor de tela.
+3. Avaliar tradução integral das mensagens nativas Laravel, separada da revisão dos
+   textos próprios. Dados digitados pelos usuários e identificadores não foram renomeados.
+4. Retomar rascunhos persistentes e reconciliação após reload, conforme o status.
+
+---
+
+## 2026-10-24 — Padronização dos campos de data
+
+**Data:** 2026-10-24
+
+**Autor:** Agente de IA
+
+**O que foi feito:**
+- Criado `<x-date-input>` e o componente Alpine `dateInput` para exibir e aceitar
+  datas no formato brasileiro `dd/mm/yyyy`, com máscara durante a digitação.
+- Datas válidas são convertidas para `yyyy-mm-dd` ao sincronizar com Livewire; datas
+  incompletas ou inválidas continuam inválidas no estado e não são convertidas para
+  uma data válida por aproximação.
+- Aplicado aos filtros da dashboard, emissão e vencimentos de títulos, edição,
+  baixa e estorno. A prévia de recorrência mantém atualização imediata.
+- Datas apenas informativas já usavam `d/m/Y`; sem mudanças no armazenamento ou schema.
+
+**Arquivos de código alterados:**
+- `resources/views/components/date-input.blade.php`
+- `resources/js/date-input.js`, `resources/js/app.js`
+- `resources/views/livewire/financial-dashboard.blade.php`
+- `resources/views/livewire/titles.blade.php`
+- `resources/views/livewire/title-detail.blade.php`
+
+**Documentos atualizados:** `docs/README.md`, `docs/DEVELOPER_GUIDE.md`,
+`docs/STATUS_DESENVOLVIMENTO.md` e este log.
+
+**Impacto no banco:** Nenhum.
+
+**Verificações:**
+- Não foram executados testes, conforme solicitado.
+- Build Vite e compilação das views aprovados; `git diff --check` sem erros.
+
+**Pendências / próximos passos:**
+1. Conferir visualmente em navegador a digitação/máscara, datas inválidas e sincronização
+   dos campos após ações Livewire; a suíte de testes não foi executada nesta mudança.
+
+---
+
+## 2026-10-24 — Restauração do calendário nativo nos campos de data
+
+**Data:** 2026-10-24
+
+**Autor:** Agente de IA
+
+**O que foi feito:**
+- A pedido do usuário, removida a máscara de texto que substituía o controle nativo
+  e restaurado `type="date"` com seletor de calendário.
+- O componente compartilhado aplica `lang="pt-BR"` para solicitar a apresentação
+  localizada sem alterar as datas ISO enviadas ao Livewire.
+- Restaurados `wire:model`, o modo `.live` na prévia de recorrência e o limite máximo
+  de data no estorno.
+- Removido o script Alpine específico que deixou de ser necessário.
+
+**Arquivos de código alterados:**
+- `resources/views/components/date-input.blade.php`
+- `resources/views/livewire/title-detail.blade.php`
+- `resources/js/app.js`
+- Removido `resources/js/date-input.js` (criado na etapa imediatamente anterior)
+
+**Documentos atualizados:** `docs/README.md`, `docs/DEVELOPER_GUIDE.md`,
+`docs/STATUS_DESENVOLVIMENTO.md` e este log.
+
+**Impacto no banco:** Nenhum.
+
+**Verificações:**
+- Testes não executados.
+- Build Vite, compilação das views e `git diff --check` aprovados.
+
+**Pendências / próximos passos:**
+1. A apresentação visual final de controles nativos depende do suporte de localização
+   do navegador e do sistema operacional; `lang="pt-BR"` solicita o formato brasileiro.

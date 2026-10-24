@@ -54,11 +54,11 @@ class CatalogService
             Gate::authorize('update', $registro);
             $dados = $this->validate($model, $dados, true);
             if (array_key_exists('type', $dados) && $dados['type'] !== $registro->type && $this->hasHistory($registro)) {
-                $this->invalid('type', 'Tipo nao pode mudar depois que o cadastro possui vinculos financeiros.');
+                $this->invalid('type', 'Tipo não pode mudar depois que o cadastro possui vínculos financeiros.');
             }
             if ($registro instanceof FinancialAccount && isset($dados['initial_balance'])
                 && $dados['initial_balance'] !== $registro->initial_balance && $registro->settlementMethods()->exists()) {
-                $this->invalid('initial_balance', 'Saldo inicial nao pode mudar depois que a conta possui movimentos.');
+                $this->invalid('initial_balance', 'Saldo inicial não pode mudar depois que a conta possui movimentos.');
             }
             $registro->fill($dados)->save();
 
@@ -68,30 +68,55 @@ class CatalogService
 
     public function archive(Contact $contato): Contact
     {
+        return $this->delete($contato);
+    }
+
+    /**
+     * Exclusao logica (soft delete); nunca remove fisicamente. Contatos preservam o historico pelos
+     * relacionamentos com withTrashed(); categorias, contas e formas so podem ser excluidas sem
+     * vinculos financeiros, caso contrario devem ser desativadas.
+     */
+    public function delete(FinancialModel $registro): FinancialModel
+    {
+        $model = $registro::class;
+        $this->assertModel($model);
         $this->requireIdentity();
 
-        return DB::transaction(function () use ($contato) {
+        return DB::transaction(function () use ($model, $registro) {
             $this->lockUser();
-            $contato = Contact::whereKey($contato->getKey())->lockForUpdate()->firstOrFail();
-            Gate::authorize('delete', $contato);
-            $contato->delete();
+            $registro = $model::whereKey($registro->getKey())->lockForUpdate()->firstOrFail();
+            Gate::authorize('delete', $registro);
+            if (! $registro instanceof Contact && $this->hasHistory($registro)) {
+                $this->invalid('delete', 'Este cadastro possui vínculos financeiros e não pode ser excluído. Desative-o para preservar o histórico.');
+            }
+            $registro->delete();
 
-            return $contato;
+            return $registro;
         }, 3);
     }
 
-    public function restore(Contact $contato): Contact
+    public function restore(FinancialModel $registro): FinancialModel
     {
+        $model = $registro::class;
+        $this->assertModel($model);
         $this->requireIdentity();
 
-        return DB::transaction(function () use ($contato) {
+        return DB::transaction(function () use ($model, $registro) {
             $this->lockUser();
-            $contato = Contact::withTrashed()->whereKey($contato->getKey())->lockForUpdate()->firstOrFail();
-            Gate::authorize('restore', $contato);
-            $contato->restore();
+            $registro = $model::withTrashed()->whereKey($registro->getKey())->lockForUpdate()->firstOrFail();
+            Gate::authorize('restore', $registro);
+            $registro->restore();
 
-            return $contato->refresh();
+            return $registro->refresh();
         }, 3);
+    }
+
+    /**
+     * Indica se a exclusao logica sera recusada por vinculos financeiros (contatos nunca sao bloqueados).
+     */
+    public function blocksDeletion(FinancialModel $registro): bool
+    {
+        return ! $registro instanceof Contact && $this->hasHistory($registro);
     }
 
     private function validate(string $model, array $dados, bool $atualizacao = false): array
@@ -130,7 +155,7 @@ class CatalogService
         }
         foreach ($dados as $chave => $valor) {
             if (! array_key_exists($chave, $regras)) {
-                $this->invalid((string) $chave, 'Campo nao permitido neste cadastro.');
+                $this->invalid((string) $chave, 'Campo não permitido neste cadastro.');
             }
             if (is_string($valor)) {
                 $dados[$chave] = trim($valor);
@@ -172,7 +197,7 @@ class CatalogService
             }
         }
         if ($maior >= 9999999999999999) {
-            $this->invalid('code', 'Limite de numeracao de contatos atingido.');
+            $this->invalid('code', 'Limite de numeração de contatos atingido.');
         }
 
         return sprintf('%s-%04d', $prefixo, $maior + 1);
@@ -181,7 +206,7 @@ class CatalogService
     private function assertModel(string $model): void
     {
         if (! in_array($model, self::MODELS, true)) {
-            throw new InvalidArgumentException('Model nao suportado pelo CatalogService.');
+            throw new InvalidArgumentException('Model não suportado pelo CatalogService.');
         }
     }
 

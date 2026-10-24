@@ -1,3 +1,3 @@
-<x-layout title="Preferencias">
+<x-layout title="Preferências">
     <livewire:user-preferences />
 </x-layout>

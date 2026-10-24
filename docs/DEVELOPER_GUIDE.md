@@ -23,7 +23,8 @@
 13. [Segurança e Isolamento de Dados](#13-segurança-e-isolamento-de-dados)
 14. [Convenções de Código](#14-convenções-de-código)
 15. [Fluxo de Trabalho Git](#15-fluxo-de-trabalho-git)
-16. [Checklist para Novas Funcionalidades](#16-checklist-para-novas-funcionalidades)
+16. [Atalhos de Arraste, Confirmações e Mensagens](#16-atalhos-de-arraste-confirmações-e-mensagens)
+17. [Checklist para Novas Funcionalidades](#17-checklist-para-novas-funcionalidades)
 
 ---
 
@@ -38,9 +39,10 @@ O fluxo do zero (pré-requisitos, `.env`, migrations, `storage:link`, build de a
 - A migration incremental `2026_10_15_000012` adiciona UUID/hash de idempotência e índice único às baixas, preservando o histórico.
 - A migration `2026_10_16_000001` adiciona estornos auditáveis, origem rastreável de novos ciclos e invalidação de recibos.
 - A migration `2026_10_16_000002` adiciona sequência de documentos, snapshot/hash de recibos e chave de deduplicação das notificações.
+- A migration `2026_10_23_000001` adiciona `deleted_at` (exclusão lógica) a `categories`, `financial_accounts` e `payment_types`. Ver [AUDITORIA_SOFTDELETE.md](AUDITORIA_SOFTDELETE.md).
 - `User` inclui `avatar`, `theme` e `notification_days_before`; novos usuários usam tema `dark` e antecedência de 7 dias, com cast inteiro.
 - `.env.example` referencia MoneyControl, MySQL e Redis (`CACHE_STORE`, não `CACHE_DRIVER`). O `.env` local usa MySQL e mantém cache/sessão/filas em `database`.
-- O ambiente disponível tem PHP 8.2.0 com `pdo_mysql` e SQLite, além de MySQL 8.0.31 instalado e em execução no Wamp. Os bancos `gestao_financeira` e `gestao_financeira_testing` receberam as 17 migrations. Redis/`phpredis` continuam pendentes. PHP 8.3+ continua sendo o requisito alvo, embora o skeleton ainda declare `^8.2`.
+- O ambiente disponível tem PHP 8.2.0 com `pdo_mysql` e SQLite, além de MySQL 8.0.31 instalado e em execução no Wamp. O banco `gestao_financeira` recebeu as 18 migrations (a de 23/10/2026 adiciona `deleted_at` aos cadastros). Em 23/10/2026 o banco `gestao_financeira_testing` não existia nesta máquina; criá-lo conforme [Testes de Integração MySQL](#testes-de-integração-mysql) antes de rodar `phpunit.mysql.xml`. Redis/`phpredis` continuam pendentes. PHP 8.3+ continua sendo o requisito alvo, embora o skeleton ainda declare `^8.2`.
 - Livewire 3.8.10 e MaryUI 2.9 instalados em produção. Tailwind 4 e daisyUI 5 são a combinação atual compatível com MaryUI 2.9, substituindo o alvo anterior Tailwind 3. Vite 6.4.4/plugin Laravel Vite 1 funcionam com Node 20.13.1. Breeze 2.4 permanece somente em desenvolvimento; seu instalador não foi executado para evitar sobrescrever rotas/layouts.
 - Onze Models financeiros, relacionamentos, casts, soft deletes e isolamento por proprietário estão implementados, com `FinancialRecordPolicy`, `TitlePolicy` e `TitleSettlementPolicy`.
 - `TitleService`, `RecurrenceService` e `Money` implementam títulos/parcelas, baixas parciais/totais, idempotência, cancelamento, edição controlada e recorrência.
@@ -61,8 +63,25 @@ php vendor/bin/pint --test app/Models app/Policies app/Services app/Support app/
 php vendor/bin/phpunit --configuration phpunit.mysql.xml
 ```
 
-Resultado atual: **324 testes aprovados, 1446 assertions em SQLite** e
-**158 testes aprovados, 1003 assertions na execução final em MySQL**.
+Resultado atual: **368 testes aprovados, 1730 assertions em SQLite** (24/10/2026) e
+**158 testes aprovados, 1003 assertions na última execução em MySQL** (anterior à migration de 23/10/2026).
+Em 24/10/2026 o focal `MySqlFinancialAnalyticsTest` passou com **1 teste / 18 assertions**;
+a migration aditiva de SoftDelete já existente foi aplicada somente ao banco de testes.
+O banco `gestao_financeira_testing` existe nesta conferência; a suíte completa MySQL
+ainda não foi reexecutada após essa migration.
+
+Se houver configuração da aplicação em cache, não a reutilize nos testes. Nesta entrega,
+ela fazia o runtime usar o ambiente e o banco da aplicação apesar do XML de testes.
+Para isolar sem apagar o cache da aplicação, use um caminho temporário inexistente:
+
+```powershell
+$env:APP_CONFIG_CACHE = "$env:TEMP/moneycontrol-testing-config.php"
+php vendor/bin/phpunit --configuration phpunit.xml
+php vendor/bin/phpunit --configuration phpunit.mysql.xml --filter=MySqlFinancialAnalyticsTest
+Remove-Item Env:APP_CONFIG_CACHE
+```
+
+As travas dos testes MySQL exigem `gestao_financeira_testing` antes de criar fixtures.
 `UserPreferencesTest` cobre defaults, cast e proteção de credenciais;
 `FinancialSchemaTest` cobre persistência da cadeia financeira, enums, unicidade, vínculos,
 exclusões restritas, manutenção do histórico e rollback transacional;
@@ -120,9 +139,9 @@ Verificação de e-mail, MFA e gerenciamento de sessões/dispositivos ainda não
 | `/esqueci-senha`, `/redefinir-senha/{token}` | Solicitação e redefinição com Password Broker |
 | `/painel` | Contagens, totais mensais aberto/realizado, próximas seis parcelas restantes e saldo de até seis contas |
 | `/dashboard-financeira` | Filtros, KPIs, gráficos e relatório imprimível de movimentos realizados |
-| `/cadastros/{module}` | `categorias`, `contatos`, `contas`, `formas` |
+| `/cadastros/{module}` | `categorias`, `contatos`, `contas`, `formas`; editar, ativar/desativar, excluir (lógico) e restaurar |
 | `/receitas`, `/despesas` | Títulos por tipo, criação simples/parcelada/recorrente, busca e filtro |
-| `/titulos/{title}` | Parcelas, principal restante, baixa/estorno, edição/cancelamento e emissão/download de PDF |
+| `/titulos/{title}` | Parcelas (valor, data da baixa e restante quando parcial), baixa/estorno, edição/cancelamento e emissão/download de PDF. `?acao=baixa` ou `?acao=estorno` (atalhos da listagem) apenas abrem o formulário correspondente |
 | `/recibos`, `/notificacoes` | Consulta de documentos e alertas |
 | `/preferencias` | Tema persistente e antecedência de alertas |
 | POST `/notificacoes/atualizar` | Gera alertas do proprietário autenticado imediatamente |
@@ -149,8 +168,8 @@ instância manual. As views de `auth/` usam POST/CSRF; módulos usam views Blade
 `resources/views/livewire/`. Não foi executado scaffolding Breeze/MaryUI.
 
 Cadastros de contatos incluem nome, tipo, documento, e-mail, telefone, endereço,
-bairro, cidade, UF, CEP e observações. A lista permite arquivar e restaurar pelo
-`CatalogService`, sem exclusão física. `UserPreferences` usa `UserPreferencesService`
+bairro, cidade, UF, CEP e observações. Todos os cadastros podem ser excluídos logicamente
+e restaurados pelo `CatalogService` ("Mostrar excluídos"), sem exclusão física. `UserPreferences` usa `UserPreferencesService`
 para validar e persistir tema (`dark`/`light`) e antecedência de 0 a 365 dias.
 `TitleDetail` já integra baixa, estorno, edição/cancelamento e PDF usando os Services, sem gravação
 direta nos Models. Recorrência mensal/anual pode ser configurada na criação.
@@ -183,6 +202,9 @@ dependências ou novas rotas financeiras nesta etapa.
 - `openPayment()` exige conta ativa e forma ativa compatível antes de gerar UUID; então preenche principal restante pelas baixas ativas.
   `settle()` delega ao `TitleService`. Aceita até 20 formas, principal parcial/total,
   desconto/juros/multa e observações. Confirmação explícita antecede a gravação.
+- `addMethod()` preenche o valor da nova forma com o que falta (`total esperado − formas já
+  informadas`, ignorando valores inválidos); vazio quando nada falta ou o total é inválido.
+  É só sugestão: o `TitleService` continua exigindo a soma exata.
 - `paymentSummary()` é somente visual: calcula em centavos o total esperado
   (`principal - desconto + juros + multa`), a soma das formas e a diferença. Campos
   incompletos exibem orientação, sem permitir que a prévia substitua a validação final
@@ -208,18 +230,41 @@ dependências ou novas rotas financeiras nesta etapa.
   expõe descrição/documento/referência/notas. Sem histórico, permite valor/datas/vínculos.
   `saveEdit()` envia somente diferenças, preservando vínculos inativos não alterados.
   O Service revalida concorrência: baixa após abertura bloqueia alteração financeira.
+- Baixa, estorno, cancelamento e descarte de pedido aberto passam pelo modal de confirmação
+  (seção 16): `requestSettle()`, `requestReverse()`, `confirmCancel()`, `requestClosePayment()`
+  e `requestCloseReversal()` só abrem o modal; `settle()`, `reverse()` e `cancel()` consomem a
+  confirmação no servidor. Reenvio de pedido já confirmado continua idempotente e sem modal.
+- `mount(int $titleId, ?string $action)`: `baixa` abre a primeira parcela em aberto;
+  `estorno` abre a baixa ativa mais recente. Erros de estado aparecem no resumo, sem gravar nada.
 - `cancel()` chama o Service; o botão só aparece sem baixas ativas. Estado final,
   IDs, valores e histórico são protegidos pelo domínio, não só pelos controles visuais.
 
-O detalhe exibe principal original e restante (baixas ativas, excluindo estornos),
-formas/contas e ajustes por baixa, motivo/data de estorno, recibos e ciclos gerados.
+O detalhe exibe, por parcela: vencimento, **Valor da parcela** e **Data da baixa** (uma data por
+baixa ativa; estornadas não contam, "—" sem baixa). O restante (valor − principal das baixas
+ativas) aparece sob o status só quando a parcela está parcialmente baixada, e continua
+preenchendo o "Principal a baixar" do formulário. Cada baixa do histórico mostra:
+`Título/Parcela · Data da baixa · Valor da parcela`, depois
+`Baixa #ID / Vencimento / Desconto / Juros / Multa` e uma linha por forma
+(`Forma · Conta · Valor pago`), além de motivo/data de estorno e recibos; e ciclos gerados.
+O histórico é ordenado pelo número da parcela (crescente) e, na mesma parcela, pela data e
+ID da baixa; baixas sem parcela (legado) ficam por último.
+O formulário de baixa mostra o campo informativo (somente leitura) **Vencimento da parcela**,
+com indicação "Vencida há N dia(s)", "Vence hoje" ou "Vence em N dia(s)" em relação a hoje.
 `WorkspaceController` calcula valores do painel em centavos: parcelas abertas no mês
 usam principal restante; baixas realizadas entram pela data da baixa e estornos no
 mesmo período reduzem o total realizado. Os próximos compromissos mostram o saldo
 restante, não o valor original. Valores são strings com ponto decimal; nenhum formulário calcula com float.
 `Titles` normaliza recorrência desmarcada para campos nulos; mensal não usa mês.
-Recorrência marcada exige uma parcela e dia/mês compatíveis com o vencimento,
-validados pelo `TitleService`. O próximo ciclo nasce somente na baixa total.
+Com "Título recorrente" marcado, a inclusão desabilita **Parcelas** (fixa 1) e
+**Primeiro vencimento**, que passa a ser calculado no servidor por
+`RecurrenceService::firstDueDate()` a partir de emissão + dia (+ mês na anual); a tela mostra
+a prévia. Valores digitados antes nesses campos são ignorados. Para registrar um ciclo cujo
+dia já passou no mês, informa-se uma emissão anterior. O `TitleService` continua validando
+uma parcela e dia/mês compatíveis. O próximo ciclo nasce somente na baixa total.
+Os blocos recorrente/não recorrente usam `wire:key` próprios: sem eles o morph do Livewire
+reaproveitava campos pela posição e o "Dia previsto" passava a gravar na data de emissão.
+O formulário de edição recebeu a mesma proteção. A edição não calcula o vencimento:
+continua permitindo informá-lo, validado pelo Service.
 
 Pedidos e rascunhos não persistem após recarregar a página. Em falha de conexão,
 conferir histórico e reenviar o pedido original antes de iniciar outro; UUID novo
@@ -351,8 +396,9 @@ para os registros financeiros, preservando o nome de relacionamento nativo de `N
 `Category`, `FinancialAccount`, `Contact`, `PaymentType`, `Title`, `TitleInstallment`,
 `TitleSettlement`, `TitleSettlementMethod`, `Receipt` e `Notification` estendem
 `FinancialModel`. Nomes e relacionamentos estão em [DATABASE.md](DATABASE.md#relacionamentos).
-`Contact` e `Title` têm soft delete; relacionamentos históricos incluem o contato ou título
-excluído logicamente, mantendo `OwnerScope`.
+`Contact`, `Title`, `Category`, `FinancialAccount` e `PaymentType` têm soft delete; relacionamentos
+históricos (`Title`, `TitleInstallment`, `TitleSettlementMethod`) usam `withTrashed()` para o
+contato, título, categoria, conta ou forma excluídos logicamente, mantendo `OwnerScope`.
 
 Os campos de identidade e relacionamento (`id`, `user_id` e demais FKs) não são mass assignable.
 Os Services devem autorizar primeiro, resolver registros do proprietário e usar
@@ -540,8 +586,14 @@ Não há chamada bancária ou transferência real: este é um estorno contábil 
 `CatalogService::create(string $model, array $dados)` e `update($registro, $dados)` aceitam
 somente `Category`, `FinancialAccount`, `Contact` e `PaymentType`. Exigem autenticação,
 validam campos/tamanhos, rejeitam chaves extras e IDs e usam transações com lock do usuário.
-`archive(Contact)` e `restore(Contact)` preservam histórico; não existe exclusão física.
-Categorias, contas e formas são desativadas com `active=false`.
+`delete(FinancialModel)` e `restore(FinancialModel)` fazem exclusão/restauração **lógica** dos
+quatro cadastros, com lock do usuário e Gate `delete`/`restore`; não existe exclusão física.
+`archive(Contact)` continua disponível e delega a `delete()`. Contatos podem ser excluídos com
+histórico. Categorias, contas e formas com vínculos financeiros (títulos, inclusive excluídos,
+parcelas ou formas de baixa) são recusadas com erro em `delete` e devem ser desativadas com
+`active=false`; `blocksDeletion()` informa isso à interface antes do modal. Registros excluídos
+não podem ser editados nem ativados/desativados sem restauração. Detalhes e justificativas em
+[AUDITORIA_SOFTDELETE.md](AUDITORIA_SOFTDELETE.md).
 
 Tipos ficam imutáveis após vínculos financeiros, incluindo títulos excluídos logicamente.
 O saldo inicial aceita valores negativos, mas não pode mudar após movimentos de baixa.
@@ -785,14 +837,19 @@ O MaryUI fornece componentes Blade elegantes já integrados com Livewire 3 e Alp
 <x-mary-chart wire:model="chartData" />
 ```
 
-### Como disparar um toast
+### Como exibir mensagens
+
+O toast do MaryUI (`Mary\Traits\Toast`) **não é usado**: ele oculta o ícone em telas pequenas,
+mostra uma mensagem por vez e não exibe mensagens de redirecionamento de controllers.
+O padrão do projeto é `App\Support\Feedback` + `<x-feedback />` (seção 16):
 
 ```php
-// Dentro do componente Livewire
-$this->success('Título salvo com sucesso!');
-$this->error('Erro ao salvar. Verifique os dados.');
-$this->warning('Título próximo ao vencimento.');
-$this->info('Dados importados: 15 títulos.');
+use App\Support\Feedback;
+
+// Componente Livewire: renderiza na mesma requisição
+Feedback::now('created', 'Título cadastrado com sucesso!', 'REC-0001 · Aluguel');
+// Controller com redirect: próxima requisição
+Feedback::flash('success', 'Notificação marcada como lida com sucesso!');
 ```
 
 ---
@@ -816,6 +873,10 @@ para definir `data-theme` em cada página autenticada. A rota `/preferencias` mo
 `UserPreferences`, que chama `UserPreferencesService` em transação e aceita somente
 `dark`/`light` e 0 a 365 dias. A alteração de tema é aplicada nas próximas páginas
 abertas; não há preferência duplicada no navegador.
+
+A variante `dark:` do Tailwind foi redefinida em `app.css` para seguir o `data-theme` do
+daisyUI (`@custom-variant dark (&:where([data-theme=dark], [data-theme=dark] *))`). Sem isso,
+classes `dark:` seguiam o tema do sistema operacional, e não a preferência do usuário.
 
 ---
 
@@ -911,14 +972,11 @@ Não há tolerância de um centavo nem cálculos com `float`. Recibos ainda est�
 
 ### Modal de baixa — Componente Livewire
 
-Modal ainda planejado. Deve manter o mesmo UUID em reenvios da mesma operação e oferecer:
-1. Informações do título (somente leitura)
-2. Data de baixa (padrão: hoje)
-3. Campos de desconto, juros e multa
-4. **Campo dinâmico de formas de pagamento** — o usuário pode adicionar N formas
-5. Validação em tempo real: soma das formas = total
-6. Checkbox "Gerar recibo em PDF"
-7. Botão de confirmar (desabilitado se soma não bater)
+Implementado como formulário em `TitleDetail` (ver [Operações Financeiras na Interface](#operações-financeiras-na-interface)):
+data (padrão hoje), principal, desconto/juros/multa, até 20 formas, prévia de total/formas e
+mesmo UUID em reenvios. O envio ("Revisar e confirmar baixa") abre o modal "Confirmar baixa?";
+somente a confirmação chama o `TitleService`. Recibo PDF é emitido separadamente no histórico
+(sem checkbox na baixa). A partir da listagem, o gesto para a direita abre este formulário.
 
 ---
 
@@ -945,6 +1003,12 @@ usa o vencimento nominal do título, não a data em que ele foi pago. Avança um
 aplica dia/mês configurados e limita o dia ao último válido do mês. Janeiro/31 gera
 fevereiro/28 e, mantendo `recurrence_day=31`, o ciclo seguinte gera março/31.
 Recorrência anual em fevereiro/29 volta a fevereiro/29 no próximo ano bissexto.
+
+`RecurrenceService::firstDueDate($emissao, $tipo, $dia, $mes)` calcula o primeiro vencimento
+na inclusão: a primeira data igual ou posterior à emissão com o dia (e o mês, na anual)
+configurado, limitada ao último dia do mês (dia 31 em fevereiro → 28/29). Emissão fora de
+`Y-m-d`, dia fora de 1–31, mês fora de 1–12 ou tipo inválido geram `ValidationException`
+nos campos `issue_date`, `recurrence_day`, `recurrence_month` ou `recurrence_type`.
 
 O `TitleService` persiste o próximo título e uma parcela na transação da baixa completa,
 com nova numeração, vínculo direto à raiz e referência `m/Y`. Recorrência exige uma parcela
@@ -1163,11 +1227,18 @@ categoria e contato sob o mesmo proprietário e soma em centavos PHP:
 - Estorno dentro do período: mesmo valor negativo na `reversal_date`.
 - Uma baixa/estorno conta como um lançamento, mesmo com várias formas; os valores seguem
   divididos pelas contas/formas efetivamente usadas.
-- Saldo inicial de conta e títulos sem baixa não entram: essa é uma análise realizada,
-  não previsão nem extrato de saldo.
+- Saldo inicial de conta e títulos sem baixa não entram nos KPIs, no gráfico de entradas
+  e saídas, nas distribuições nem no relatório: essa é uma análise realizada, não previsão.
+  Apenas o histórico `accounts` inclui saldo inicial; ele também segue todos os filtros.
 
 Datas inicial/final são inclusivas. Categorias, formas e contas usam chips de inclusão:
-todos marcados é consolidado; desmarcar um transforma-o em exclusão. Contatos usam
+todos marcados é consolidado; desmarcar um transforma-o em exclusão. Chips e contatos
+entram em vigor no clique (`toggle()`), mas reutilizam as datas e o agrupamento **já
+aplicados**: datas digitadas só valem em **Aplicar filtros**/**Gerar relatório**, e uma
+data pendente inválida não bloqueia os chips. A busca de contatos filtra a lista no
+navegador (`wire:model` diferido + `x-show`), sem refazer a análise a cada tecla.
+`FinancialDashboard::$result` guarda o resultado calculado na ação para que `render()` não
+repita a consulta na mesma requisição. Contatos usam
 seleção múltipla inclusiva, com busca; uma seleção vazia inclui todos. IDs são validados
 como pertencentes ao autenticado. Para proteger a renderização, a consulta limita-se a
 10.000 formas por análise e retorna validação solicitando filtros mais restritos acima
@@ -1175,13 +1246,64 @@ desse limite.
 
 ### Indicadores, gráficos e relatório
 
-Os KPIs são entradas, saídas, saldo líquido e quantidade de eventos. O gráfico temporal
-mantém todos os dias do período, inclusive dias sem movimentação, e as distribuições por
-categoria/forma mostram percentuais separados para entradas e saídas. A tabela detalhada
-usa `movement_days`, somente datas com eventos, sem excluir dias de líquido zero após
-estorno. `daily` mantém o período inteiro. `financial-timeline.blade.php` fornece tooltip
-com strings monetárias formatadas no servidor, seleção por posição no SVG, toque e setas
-do teclado; floats são usados apenas para coordenadas do desenho, nunca para totais.
+**Campos de data:** use `<x-date-input>` para qualquer data editável. Ele renderiza o
+controle nativo `type="date"` com `lang="pt-BR"`, preservando o calendário e solicitando
+ao navegador a apresentação brasileira. O estado Livewire permanece em `yyyy-mm-dd`,
+formato esperado pelos Services e validações. Passe `model` com o caminho Livewire e
+`value` com o valor ISO atual. Use `live` somente quando a tela precisar recalcular
+prévias enquanto a data é alterada; os demais campos mantêm sincronização diferida
+até a ação Livewire. `max` aceita uma data ISO. Datas de leitura devem ser formatadas
+como `d/m/Y`.
+
+Os KPIs (`.kpi-card`) são entradas, saídas, saldo líquido (verde/vermelho pelo sinal) e
+quantidade de eventos. O gráfico temporal mantém todos os dias do período, inclusive dias
+sem movimentação. As distribuições por categoria/forma vêm ordenadas pela maior
+participação (`|entradas| + |saídas|`, empate por nome) e mostram barras e percentuais
+separados para entradas e saídas; participações acima de zero e abaixo de 1% aparecem
+como `<1%`. A tabela detalhada usa `movement_days`, somente datas com eventos, sem excluir
+dias de líquido zero após estorno, com datas `d/m/Y` e coluna de saldo do dia.
+`daily` mantém o período inteiro.
+
+**Gráficos (SVG + Alpine, sem biblioteca externa):**
+
+- `financial-timeline.blade.php`: entradas e saídas diárias. Escala Y "redonda"
+  (passos 1/2/2,5/5 × 10ⁿ, ~4 intervalos, inclui zero e negativos) com rótulos compactos
+  em uma unidade única (`R$`, `mil`, `mi`); linha do zero destacada. Tooltip com strings
+  monetárias formatadas no servidor, entradas, saídas e saldo do dia; acompanha o ponto
+  mais alto da data e aparece abaixo dele quando não há espaço acima. Seleção por posição,
+  toque e setas do teclado.
+- `account-balance-chart.blade.php`: uma linha por conta com o saldo ao fim de cada dia.
+  A escala Y é recalculada no navegador apenas com as contas selecionadas nos mini cards
+  (todas marcadas por padrão, ações **Todas**/**Nenhuma**). Cada card mostra saldo final e
+  variação no período. Tooltip lista as contas da maior para a menor e o total selecionado.
+- `App\Support\ChartAxis` centraliza a posição X dos pontos e os até 7 rótulos de data
+  (`d/m`, ou `d/m/y` quando o período cruza anos), compartilhados pelos dois gráficos.
+- Ambos usam a área de plotagem 960×300 (margem esquerda 88), linhas de 2px com
+  `vector-effect="non-scaling-stroke"`, grade de 1px e cores do tema daisyUI. Em telas
+  estreitas o gráfico tem largura mínima de 720px e rola na horizontal, mantendo os eixos
+  legíveis. Floats são usados apenas para coordenadas do desenho, nunca para totais.
+
+**Histórico de saldo por conta (`accounts`):** `FinancialAnalyticsService::accountBalances()`
+calcula saldo inicial + recebimentos − pagamentos, com estorno na própria data.
+Aplica os filtros principais de conta, categoria, forma e contato tanto aos movimentos
+anteriores ao período que formam `opening` quanto aos movimentos da série `values`
+(um valor por dia de `daily`). As datas são inclusivas e movimentos posteriores ao fim
+não entram. O saldo inicial é preservado, pois não possui categoria, forma ou contato.
+Com filtros restritivos, a tela informa que o resultado é **saldo analítico**, não
+saldo bancário completo; `FinancialAccountService::balance()` continua calculando o
+saldo integral, sem mudança de contrato. Abertura e cada saldo diário são validados
+nos limites de `Money`, em centavos inteiros. Os mini cards só controlam a visibilidade
+local das linhas, sem substituir os filtros principais.
+Conta inativa só sai do gráfico se não movimentou no período
+**e** está zerada. A cor é a cadastrada na conta; cores repetidas (ex.: o padrão
+`#8b5cf6`) recebem o próximo tom livre de uma paleta categórica fixa.
+
+**Padrão visual:** seções usam `.panel` + `.section-header`/`.section-title` (ícone MaryUI)
+/`.section-subtitle`; filtros usam `.filter-chip`/`.is-on` com ícone de estado; o período
+aplicado aparece em `.period-badge`; distribuições usam `.share-item`/`.share-row`.
+Classes definidas em `resources/css/app.css`. Evite misturar `@php(...)` inline com blocos
+`@php ... @endphp` no mesmo template: o compilador do Blade pode engolir o conteúdo entre
+eles (gera "Undefined variable"); use sempre a forma em bloco.
 
 `generateReport()` reaplica os filtros e mostra uma visão imprimível. Os agrupamentos
 suportados são `Conta > Contato > Data`, `Conta > Data` e `Conta > Categoria > Data`.
@@ -1201,10 +1323,24 @@ Grupos podem atravessar páginas; linhas da tabela continuam protegidas contra q
 O botão **Imprimir / salvar PDF** usa o diálogo do navegador: não cria arquivo nem recibo
 no servidor.
 
+O total do relatório usa o rótulo **Saldo líquido do período** (entradas − saídas do
+período), não saldo final de conta.
+
 `FinancialDashboardTest` cobre valores divididos por forma, filtros combinados, estorno
 em período diferente, limites inclusivos, cadastros históricos, isolamento de proprietário,
-todos os agrupamentos e reset. `MySqlFinancialAnalyticsTest` confirma precisão decimal,
-datas de estorno e filtro de conta no banco MySQL de testes.
+todos os agrupamentos, reset, chips sem aplicar datas pendentes, ordenação das
+distribuições e histórico de saldo por conta (abertura filtrada, saldo inicial preservado,
+filtros individuais/combinados, contatos múltiplos, estorno de baixa anterior, limites
+de datas, conta excluída e conta inativa com saldo): **18 testes / 125 assertions**.
+`MySqlFinancialAnalyticsTest` confirma precisão decimal, abertura filtrada, datas de
+estorno e filtros de categoria, forma, contato e conta no banco MySQL de testes.
+
+**Textos da interface (24/10/2026):** revisados rótulos, navegação, formulários,
+mensagens próprias dos Services, relatório e recibos em português brasileiro.
+Identificadores técnicos e dados persistidos não devem ser corrigidos por substituição
+ortográfica. Testes que verificam texto em resposta Livewire devem comparar o HTML
+decodificado (`$response->json('components.0.effects.html')`), não o JSON bruto com
+Unicode escapado. Esta revisão não adiciona tradução integral das regras nativas Laravel.
 
 ---
 
@@ -1270,7 +1406,7 @@ $baixas = $consulta->get();
 
 `Gate::authorize()` deve ser chamado antes de mutações e downloads. `FinancialRecordPolicy`
 permite leitura ao dono, atualização de cadastros/notificações e soft delete/restauração de
-contatos. `TitlePolicy` permite atualização e soft delete/restauração do título do dono;
+categorias, contatos, contas e formas (dependências validadas no `CatalogService`). `TitlePolicy` permite atualização e soft delete/restauração do título do dono;
 restrições financeiras adicionais serão responsabilidade do Service.
 Baixas, parcelas, formas e recibos não têm atualização/exclusão genérica via Policy.
 Exclusão física (`forceDelete`) é negada em todos os Models financeiros.
@@ -1348,7 +1484,110 @@ chore: adiciona seeder de categorias padrão
 
 ---
 
-## 16. Checklist para Novas Funcionalidades
+## 16. Atalhos de Arraste, Confirmações e Mensagens
+
+### Gestos nas listagens
+
+`<x-swipe-row>` (`resources/views/components/swipe-row.blade.php`) + `swipeRow`
+(`resources/js/swipe-row.js`, registrado em `app.js` no evento `alpine:init`; Alpine vem do
+Livewire). Usa Pointer Events (mouse, touchpad e toque) com `touch-action: pan-y`:
+
+- O eixo é decidido após 8px; movimento predominantemente vertical abandona o gesto (rolagem).
+- Limite para reconhecer: 30% da largura da linha (mín. 72px, máx. 140px). Soltar antes, ou
+  `Esc`, devolve a linha. Controles (`button`, `input`, `select`...) não iniciam arraste;
+  o clique em link após arrastar é bloqueado.
+- Durante o arraste, a faixa revelada mostra ícone, cor e rótulo da ação; após soltar, a
+  linha fica "Processando operação..." até a resposta, impedindo disparo duplicado.
+- O gesto só chama um método Livewire configurado (`method` + `args`). O servidor recarrega o
+  registro do dono, revalida o estado e, se necessário, abre o modal. Nada é gravado pelo gesto.
+- As dicas (`right`/`left`: `label`, `icon`, `tone`) são calculadas no servidor pelo estado
+  atual; o tom `neutral` indica ação indisponível e o servidor informa o motivo ao soltar.
+
+| Tela | Direita | Esquerda |
+|---|---|---|
+| `Titles` (`/receitas`, `/despesas`) | `startSettlement()`: título aberto com parcela pendente/vencida → redireciona a `?acao=baixa` | `startReversalOrCancellation()`: com baixa ativa → `?acao=estorno` (motivo/data obrigatórios); sem baixa → modal de cancelamento; cancelado → motivo |
+| `Catalog` (`/cadastros/*`) | `edit()`: carrega o formulário e dispara `catalog-form-focus` (rola e foca) | `confirmDelete()`: modal de exclusão lógica; vínculos financeiros → motivo |
+
+Os botões de cada linha chamam os mesmos métodos (alternativa sem gesto).
+`<x-gesture-help context="titles|catalog" />` renderiza o botão flutuante de ajuda e o
+tutorial (modal MaryUI com `<dialog>` nativo: Esc, botão fechar, foco inicial em "Entendi").
+
+### Confirmação obrigatória
+
+`App\Livewire\Concerns\ConfirmsOperations` + `<x-confirm-modal :confirmation="$confirmation" />`
+(modal MaryUI com `wire:model="confirming"`):
+
+- `askConfirmation($operacao, $alvo, $assunto)` grava o pedido em `$confirmation`
+  (`#[Locked]`) e abre o modal. Fechar por Esc/X/fundo/"Cancelar" descarta o pedido.
+- `confirmOperation()` chama o método mapeado em `confirmableOperations()`. Esse método
+  chama `consumeConfirmation($operacao, $alvo)` **antes** do Service: sem pedido pendente
+  igual, lança erro `confirmation` e nada é gravado. Clique repetido após concluir é ignorado.
+- Falha de validação durante a confirmação fecha o modal e mostra a notificação de erro.
+- Textos, ícones e botões ficam em `Feedback::CONFIRMATIONS`: `reverse` ("Estornar baixa?" /
+  "Confirmar estorno"), `cancel` ("Confirmar cancelamento?"), `delete` ("Confirmar exclusão?"),
+  `settle` ("Confirmar baixa?"), `discard-payment` e `discard-reversal`.
+
+```php
+use App\Livewire\Concerns\ConfirmsOperations;
+
+protected function confirmableOperations(): array
+{
+    return ['delete' => 'delete'];
+}
+
+public function confirmDelete(int $id): void   // botão ou gesto
+{
+    $this->askConfirmation('delete', $id, 'Categoria · Lazer');
+}
+
+public function delete(int $id, CatalogService $service): void
+{
+    $this->consumeConfirmation('delete', $id);  // obrigatório antes de gravar
+    $service->delete(Category::findOrFail($id));
+    Feedback::now('deleted', 'Categoria excluída com sucesso!');
+}
+```
+
+### Mensagens com ícone
+
+`App\Support\Feedback::KINDS` define ícone (Heroicons via MaryUI) e tom: `created`
+(o-plus-circle), `updated` (o-pencil-square), `deleted` (o-trash), `settled` (o-banknotes),
+`reversed` (o-arrow-uturn-left), `cancelled` (o-no-symbol), `restored` (o-arrow-path),
+`activated`/`deactivated`, `receipt`, `success`, `info`, `warning`, `error`.
+`<x-feedback />` exibe a notificação flutuante (canto inferior direito, acima do botão de
+ajuda) com ícone, texto, detalhe opcional e botão "Fechar mensagem"; sucesso fecha em 6s,
+informação em 8s, aviso/erro só manualmente. Erro/aviso usam `role="alert"`; os demais,
+`role="status"`. Ícones têm `aria-hidden`; o texto é sempre exibido. Erros de validação
+aparecem no resumo com ícone (rolado para a área visível), exceto quando a notificação de
+erro já mostrou o motivo. `session('status')` legado (autenticação) é exibido como informação.
+
+Padrão dos textos: "[Entidade/Operação] … com sucesso!" somente após o retorno do Service,
+por exemplo "Título cadastrado com sucesso!", "Baixa realizada com sucesso!", "Estorno
+realizado com sucesso!", "Título cancelado com sucesso!", "Conta financeira alterada com
+sucesso!", "Categoria excluída com sucesso!", "Contato restaurado com sucesso!".
+`Catalog::ENTITIES` guarda nome singular e gênero de cada cadastro para essas mensagens.
+
+### Layout das listagens
+
+`.record-list` é um container (`@container`); as colunas usam `@3xl:` (largura da própria
+lista, não da tela), porque o formulário lateral estreita a lista em telas médias. Abaixo
+disso a linha empilha título, valores, status e ações. Classes em `resources/css/app.css`:
+`.record-list`, `.record-row`, `.status-badge`, `.swipe-row*`, `.swipe-tone--*`,
+`.feedback*`, `.confirm-modal*`, `.help-fab`, `.gesture-*`.
+`Display::statusBadge()` fornece ícone/tom do status do título.
+
+### Testes
+
+`InteractionShortcutsTest` (21 testes): dicas por estado, redirecionamentos dos atalhos,
+modal de cancelamento/estorno/exclusão, cancelamento do modal sem alterar dados, fechamento
+pelo navegador, bloqueio de operação sem confirmação, revalidação de estado (baixa registrada
+com o modal aberto), confirmação repetida, propriedade bloqueada, isolamento por dono,
+mensagens, componente de notificação, exclusão lógica/restauração e regras de vínculos.
+Validação de navegador (Edge headless, SQLite temporário fora do projeto): arraste curto,
+Esc, modal, toasts, toque em 375px, rolagem vertical sem disparo, temas claro/escuro e
+ausência de erros no console.
+
+## 17. Checklist para Novas Funcionalidades
 
 Antes de considerar uma funcionalidade pronta, verificar:
 
@@ -1357,13 +1596,16 @@ Antes de considerar uma funcionalidade pronta, verificar:
 - [ ] Operações críticas dentro de `DB::transaction()`
 - [ ] Filtro `user_id` em todas as queries
 - [ ] Soft delete implementado onde aplicável
-- [ ] Tratamento de erros com try/catch e toast de erro
-- [ ] Toast de sucesso após operação bem-sucedida
+- [ ] Tratamento de erros com mensagem de erro (`Feedback`/resumo de validação)
+- [ ] Mensagem de sucesso com ícone após operação bem-sucedida
 - [ ] Componente recebe apenas os dados necessários (sem over-fetching)
 - [ ] Migração criada e testada
 - [ ] Seeder atualizado se necessário
 - [ ] Rota protegida com middleware `auth`
 - [ ] Policy criada para operações sensíveis
+- [ ] Estorno, cancelamento e exclusão passam por `ConfirmsOperations` (modal + consumo no servidor)
+- [ ] Mensagens via `Feedback::now()`/`flash()` com tipo (ícone) adequado, só após sucesso no Service
+- [ ] Listagens com ações frequentes avaliadas para `<x-swipe-row>` + botões equivalentes
 - [ ] Atualizado o `AI_DEV_LOG.md` com o que foi implementado
 
 ---

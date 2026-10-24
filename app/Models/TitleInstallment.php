@@ -30,7 +30,7 @@ class TitleInstallment extends FinancialModel
 
     public function financialAccount(): BelongsTo
     {
-        return $this->belongsTo(FinancialAccount::class);
+        return $this->belongsTo(FinancialAccount::class)->withTrashed();
     }
 
     public function settlements(): HasMany

@@ -18,6 +18,9 @@ class FinancialDashboard extends Component
     #[Locked]
     public bool $report = false;
 
+    /** Resultado da analise ja calculado nesta requisicao; evita repetir a consulta no render. */
+    protected ?array $result = null;
+
     public function mount(): void
     {
         $this->clearFilters();
@@ -34,13 +37,19 @@ class FinancialDashboard extends Component
         $this->applied = $this->filters;
         $this->contactSearch = '';
         $this->report = false;
+        $this->result = null;
         $this->resetValidation();
     }
 
     public function applyFilters(FinancialAnalyticsService $service): void
     {
-        $result = $service->analyze($this->filters);
-        $this->applied = $result['filters'];
+        $this->apply($service, $this->filters);
+    }
+
+    private function apply(FinancialAnalyticsService $service, array $filters): void
+    {
+        $this->result = $service->analyze($filters);
+        $this->applied = $this->result['filters'];
         $this->report = false;
         $this->resetValidation();
     }
@@ -71,7 +80,10 @@ class FinancialDashboard extends Component
         $this->filters[$field] = in_array($id, $values)
             ? array_values(array_diff($values, [$id]))
             : [...$values, $id];
-        $this->applyFilters($service);
+        // Chips entram em vigor na hora; datas e agrupamento pendentes so valem ao aplicar.
+        $this->apply($service, array_replace($this->filters, [
+            'start' => $this->applied['start'], 'end' => $this->applied['end'], 'grouping' => $this->applied['grouping'],
+        ]));
     }
 
     public function render()
@@ -80,7 +92,7 @@ class FinancialDashboard extends Component
         $options = $service->options();
 
         return view('livewire.financial-dashboard', [
-            'data' => $service->analyze($this->applied),
+            'data' => $this->result ?? $service->analyze($this->applied),
             'options' => $options,
             'contactOptions' => $options['contacts']->filter(fn ($contact) => str_contains(
                 mb_strtolower($contact->name), mb_strtolower(mb_substr($this->contactSearch, 0, 100))

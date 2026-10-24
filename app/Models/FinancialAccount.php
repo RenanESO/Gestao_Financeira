@@ -4,9 +4,12 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class FinancialAccount extends FinancialModel
 {
+    use SoftDeletes;
+
     protected $fillable = ['name', 'type', 'initial_balance', 'color', 'icon', 'active'];
 
     protected function casts(): array

@@ -24,4 +24,20 @@ final class Display
             default => $status,
         };
     }
+
+    /**
+     * Icone e tom do selo de status; o texto continua sendo exibido junto ao icone.
+     *
+     * @return array{icon: string, tone: string}
+     */
+    public static function statusBadge(string $status): array
+    {
+        return match ($status) {
+            'pending' => ['icon' => 'o-clock', 'tone' => 'info'],
+            'partial' => ['icon' => 'o-chart-pie', 'tone' => 'warning'],
+            'paid' => ['icon' => 'o-check-circle', 'tone' => 'success'],
+            'overdue' => ['icon' => 'o-exclamation-triangle', 'tone' => 'error'],
+            default => ['icon' => 'o-no-symbol', 'tone' => 'neutral'],
+        };
+    }
 }

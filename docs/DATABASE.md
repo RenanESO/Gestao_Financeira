@@ -4,24 +4,43 @@
 > **ORM:** Laravel Eloquent  
 > **Convenção de nomes:** tabelas e colunas em inglês (snake_case), domínio em português na camada de aplicação
 
-## Estado e Migrations (16/10/2026)
+## Estado e Migrations (23/10/2026)
 
-A estrutura abaixo está implementada nas 17 migrations (três de infraestrutura e quatorze
-financeiras/perfil), aplicadas no MySQL local `gestao_financeira` e no banco exclusivo
-`gestao_financeira_testing`. Criação, reversão e reaplicação também foram testadas em SQLite
+A estrutura abaixo está implementada nas 18 migrations (três de infraestrutura e quinze
+financeiras/perfil). Em 23/10/2026 todas estão aplicadas no MySQL local `gestao_financeira`;
+o banco exclusivo `gestao_financeira_testing` não existia nesta máquina e precisa ser criado
+e migrado antes da suíte MySQL (ver `DEVELOPER_GUIDE.md`).
+Em 24/10/2026 o banco de testes foi encontrado existente, mas sem `deleted_at` nos três
+cadastros. A migration aditiva já existente de 23/10 foi aplicada exclusivamente em
+`gestao_financeira_testing`; nenhum reset, rollback de schema ou alteração de dados
+financeiros foi executado no banco da aplicação.
+
+**Migration `2026_10_23_000001_add_soft_deletes_to_catalog_tables`:** adiciona `deleted_at`
+(TIMESTAMP nulo) a `categories`, `financial_accounts` e `payment_types`. É aditiva e não altera
+dados. O `down()` remove a coluna — registros excluídos logicamente voltariam a aparecer; não
+reverter em produção sem plano. Auditoria completa em [AUDITORIA_SOFTDELETE.md](AUDITORIA_SOFTDELETE.md). Criação, reversão e reaplicação também foram testadas em SQLite
 em memória; nenhum rollback ou reset foi executado no MySQL.
 Os onze Models financeiros, seus relacionamentos e casts estão implementados.
 `TitleService`, `RecurrenceService` e `Money` implementam criação/parcelas,
 baixas parciais/totais, idempotência, cancelamento e cálculo de recorrência.
 `FinancialAccountService` calcula saldo por conta/data; `FinancialAnalyticsService` apenas
-consulta as baixas/estornos e respectivas formas para dashboard/relatório, sem criar
+consulta as baixas/estornos e respectivas formas (e `financial_accounts.initial_balance`
+para o histórico diário de saldo por conta) para dashboard/relatório, sem criar
 tabela, PDF persistido ou novos movimentos; `CatalogService` valida cadastros
 e protege vínculos históricos. Edição controlada de títulos, rotina de vencidos e
 inicialização dos cadastros padrão estão implementadas. `SettlementReversalService`
 preserva a baixa original, reabre principal e invalida recibos existentes.
 PDF privado e notificações deduplicadas estão implementados; importação/exportação seguem pendentes.
 
-Validação: **324 testes / 1446 assertions em SQLite**; última regressão completa MySQL: **158 testes / 1003 assertions**.
+O histórico da dashboard aplica conta, categoria, forma e contato à leitura dos movimentos
+anteriores e do período. `opening` preserva `initial_balance` e soma apenas o histórico
+correspondente; estornos são invertidos na própria data. Com filtros restritivos,
+é saldo analítico. `FinancialAccountService::balance()` continua fornecendo saldo integral.
+Esta mudança e a revisão ortográfica não criam migration nem reescrevem registros.
+
+Validação: **368 testes / 1730 assertions em SQLite** (24/10/2026); focal de analytics MySQL:
+**1 teste / 18 assertions** (24/10/2026). Última regressão completa MySQL:
+**158 testes / 1003 assertions** (antes da migration de 23/10/2026).
 No MySQL foram conferidas 21 tabelas com InnoDB e `utf8mb4_unicode_ci`, 22 FKs restritivas,
 índices, precisão de `DECIMAL(15,2)`, enums, unicidade e consultas com proprietário indireto.
 Testes MySQL comuns fazem rollback; concorrência usa commits temporários e limpeza limitada
@@ -100,8 +119,8 @@ O skeleton também mantém as tabelas de infraestrutura `password_reset_tokens`,
 - Deduplicação é única em `(user_id, deduplication_key)`; nulos legados permanecem permitidos. O Service calcula chave por evento/parcela/vencimento, não por dia.
 - `notifications` é uma tabela customizada; não corresponde ao esquema do canal `database` nativo do Laravel. O relacionamento implementado em `User` chama-se `financialNotifications()`, com `App\Models\Notification` e `unread()`.
 - Os Models financeiros estendem `FinancialModel`, com `OwnerScope` que restringe consultas ao usuário autenticado e retorna vazio sem identidade. Parcelas/baixas pertencem ao proprietário do título; formas pertencem ao proprietário do título da baixa.
-- `Contact` e `Title` usam `SoftDeletes`. Referências históricas a contatos, título pai e títulos de parcelas/baixas incluem registros excluídos logicamente sem remover o filtro de proprietário.
-- A tela de contatos usa os campos já existentes de endereço e observações, e o arquivamento/restauração apenas altera `deleted_at`. A página de preferências grava `users.theme` e `users.notification_days_before`; esta etapa não exigiu migration.
+- `Contact`, `Title`, `Category`, `FinancialAccount` e `PaymentType` usam `SoftDeletes`. Referências históricas a contatos, categorias, contas, formas, título pai e títulos de parcelas/baixas incluem registros excluídos logicamente sem remover o filtro de proprietário.
+- A exclusão/restauração de cadastros apenas altera `deleted_at`. Categorias, contas e formas só podem ser excluídas sem vínculos financeiros (títulos, inclusive excluídos, parcelas ou formas de baixa); com vínculos, usa-se `active=false`. Contatos podem ser excluídos com histórico. A página de preferências grava `users.theme` e `users.notification_days_before`; esta etapa não exigiu migration.
 
 ---
 
@@ -156,6 +175,7 @@ erDiagram
         boolean active
         timestamp created_at
         timestamp updated_at
+        timestamp deleted_at
     }
 
     FINANCIAL_ACCOUNTS {
@@ -169,6 +189,7 @@ erDiagram
         boolean active
         timestamp created_at
         timestamp updated_at
+        timestamp deleted_at
     }
 
     CONTACTS {
@@ -200,6 +221,7 @@ erDiagram
         boolean active
         timestamp created_at
         timestamp updated_at
+        timestamp deleted_at
     }
 
     TITLES {
@@ -382,6 +404,7 @@ erDiagram
 | `active` | BOOLEAN | Não | `true` | Se a categoria está ativa |
 | `created_at` | TIMESTAMP | Sim | NULL | Preenchido pelo Eloquent |
 | `updated_at` | TIMESTAMP | Sim | NULL | Preenchido pelo Eloquent |
+| `deleted_at` | TIMESTAMP | Sim | NULL | Exclusão lógica (somente sem vínculos financeiros) |
 
 **Índices:** `(user_id, active)`, `(user_id, type)`
 
@@ -402,6 +425,7 @@ erDiagram
 | `active` | BOOLEAN | Não | `true` | Se a conta está ativa |
 | `created_at` | TIMESTAMP | Sim | NULL | Preenchido pelo Eloquent |
 | `updated_at` | TIMESTAMP | Sim | NULL | Preenchido pelo Eloquent |
+| `deleted_at` | TIMESTAMP | Sim | NULL | Exclusão lógica (somente sem vínculos financeiros) |
 
 **Saldo calculado:** Implementado em `FinancialAccountService::balance()`:
 `initial_balance + formas recebidas - formas pagas` da conta, via
@@ -459,6 +483,7 @@ Centavos e resultados assinados são calculados sem `float`, com limites explíc
 | `active` | BOOLEAN | Não | `true` | Se está ativo |
 | `created_at` | TIMESTAMP | Sim | NULL | Preenchido pelo Eloquent |
 | `updated_at` | TIMESTAMP | Sim | NULL | Preenchido pelo Eloquent |
+| `deleted_at` | TIMESTAMP | Sim | NULL | Exclusão lógica (somente sem vínculos financeiros) |
 
 **Índices:** `(user_id, active)`, `(user_id, type)`
 

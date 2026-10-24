@@ -38,16 +38,23 @@ class FinancialRecordPolicy
 
     public function delete(User $usuario, FinancialModel $registro): bool
     {
-        return $this->view($usuario, $registro) && $registro instanceof Contact;
+        // Somente exclusao logica dos cadastros; dependencias sao validadas no CatalogService.
+        return $this->view($usuario, $registro) && $this->isCatalog($registro);
     }
 
     public function restore(User $usuario, FinancialModel $registro): bool
     {
-        return $this->view($usuario, $registro) && $registro instanceof Contact;
+        return $this->view($usuario, $registro) && $this->isCatalog($registro);
     }
 
     public function forceDelete(User $usuario, FinancialModel $registro): bool
     {
         return false;
+    }
+
+    private function isCatalog(FinancialModel $registro): bool
+    {
+        return $registro instanceof Category || $registro instanceof Contact
+            || $registro instanceof FinancialAccount || $registro instanceof PaymentType;
     }
 }

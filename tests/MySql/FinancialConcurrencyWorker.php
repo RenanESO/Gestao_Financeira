@@ -61,7 +61,7 @@ try {
         'reverse' => app(SettlementReversalService::class)->reverse(TitleSettlement::findOrFail($pedido['settlement']), $pedido['data']),
         'receipt' => app(ReceiptService::class)->generate(TitleSettlement::findOrFail($pedido['settlement'])),
         'notify' => app(NotificationService::class)->generateFor($usuario, '2026-10-16'),
-        default => throw new RuntimeException('Operacao nao suportada.'),
+        default => throw new RuntimeException('Operação não suportada.'),
     };
     echo 'RESULT:'.json_encode(['status' => 'ok', 'id' => is_int($registro) ? $registro : $registro->id], JSON_THROW_ON_ERROR)."\n";
 } catch (ValidationException $exception) {

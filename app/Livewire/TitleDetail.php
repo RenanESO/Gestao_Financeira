@@ -2,6 +2,7 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\ConfirmsOperations;
 use App\Models\Category;
 use App\Models\Contact;
 use App\Models\FinancialAccount;
@@ -12,6 +13,8 @@ use App\Models\TitleSettlement;
 use App\Services\ReceiptService;
 use App\Services\SettlementReversalService;
 use App\Services\TitleService;
+use App\Support\Display;
+use App\Support\Feedback;
 use App\Support\Money;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
@@ -23,6 +26,8 @@ use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 class TitleDetail extends Component
 {
+    use ConfirmsOperations;
+
     #[Locked]
     public int $titleId;
 
@@ -56,10 +61,72 @@ class TitleDetail extends Component
     #[Locked]
     public bool $editing = false;
 
-    public function mount(int $titleId): void
+    public function mount(int $titleId, ?string $action = null): void
     {
         $this->titleId = $titleId;
         $this->record();
+        if ($action !== null) {
+            $this->startShortcut($action);
+        }
+    }
+
+    protected function confirmableOperations(): array
+    {
+        return [
+            'settle' => 'settle', 'reverse' => 'reverse', 'cancel' => 'cancel',
+            'discard-payment' => 'closePayment', 'discard-reversal' => 'closeReversal',
+        ];
+    }
+
+    public function requestClosePayment(): void
+    {
+        // Pedido ja confirmado pode ser fechado sem aviso: nao ha nada pendente de envio.
+        if ($this->completedPayment === null) {
+            $this->askConfirmation('discard-payment');
+        } else {
+            $this->closePayment();
+        }
+    }
+
+    public function requestCloseReversal(): void
+    {
+        if ($this->completedReversal === null) {
+            $this->askConfirmation('discard-reversal');
+        } else {
+            $this->closeReversal();
+        }
+    }
+
+    /**
+     * Continuacao dos atalhos de arraste da listagem: abre o mesmo formulario dos botoes,
+     * com as mesmas validacoes. Nada e gravado sem o envio e a confirmacao do usuario.
+     */
+    private function startShortcut(string $action): void
+    {
+        $title = $this->record()->load('installments', 'settlements.reversal');
+        try {
+            if ($action === 'baixa') {
+                $installment = $title->installments->first(fn ($item) => in_array($item->status, ['pending', 'overdue'], true));
+                if ($installment === null) {
+                    throw ValidationException::withMessages(['status' => 'Nenhuma parcela em aberto para baixa.']);
+                }
+                $this->openPayment($installment->id);
+            } elseif ($action === 'estorno') {
+                $settlement = $title->settlements->filter(fn ($item) => $item->reversal === null)
+                    ->sortByDesc(fn ($item) => [$item->settlement_date->toDateString(), $item->id])->first();
+                if ($settlement === null) {
+                    throw ValidationException::withMessages(['reversal' => 'Nenhuma baixa ativa para estornar.']);
+                }
+                $this->openReversal($settlement->id);
+                Feedback::now('info', 'Informe o motivo do estorno.', 'Estorno da baixa #'.$settlement->id.', a mais recente ainda ativa.');
+            }
+        } catch (ValidationException $exception) {
+            foreach ($exception->errors() as $field => $messages) {
+                foreach ($messages as $message) {
+                    $this->addError($field, $message);
+                }
+            }
+        }
     }
 
     private function record(): Title
@@ -90,7 +157,7 @@ class TitleDetail extends Component
         }
         if (! in_array($title->status, ['pending', 'partial', 'overdue'], true)
             || ! in_array($installment->status, ['pending', 'overdue'], true)) {
-            throw ValidationException::withMessages(['status' => 'Parcela nao permite nova baixa.']);
+            throw ValidationException::withMessages(['status' => 'Parcela não permite nova baixa.']);
         }
         if (! FinancialAccount::where('active', true)->exists()) {
             throw ValidationException::withMessages([
@@ -99,7 +166,7 @@ class TitleDetail extends Component
         }
         if (! PaymentType::where('active', true)->whereIn('type', [$paymentType, 'both'])->exists()) {
             throw ValidationException::withMessages([
-                'payment' => 'Cadastre e ative uma forma compativel antes de registrar a baixa.',
+                'payment' => 'Cadastre e ative uma forma compatível antes de registrar a baixa.',
             ]);
         }
         $remaining = $this->remaining($installment->load('settlements.reversal'));
@@ -120,6 +187,7 @@ class TitleDetail extends Component
         $this->paymentKey = null;
         $this->completedPayment = null;
         $this->payment = [];
+        $this->dismissConfirmation();
         $this->resetValidation();
     }
 
@@ -127,8 +195,27 @@ class TitleDetail extends Component
     {
         if ($this->completedPayment === null && $this->installmentId !== null
             && count($this->payment['payment_methods'] ?? []) < 20) {
-            $this->payment['payment_methods'][] = ['payment_type_id' => '', 'financial_account_id' => '', 'value' => ''];
+            $this->payment['payment_methods'][] = ['payment_type_id' => '', 'financial_account_id' => '', 'value' => $this->missingValue()];
         }
+    }
+
+    /**
+     * Sugestao para a nova forma: total esperado menos as formas ja informadas (vazio se nada falta).
+     * E apenas um preenchimento inicial; o TitleService continua exigindo a soma exata.
+     */
+    private function missingValue(): string
+    {
+        $total = $this->paymentSummary()['total'];
+        if ($total === null) {
+            return '';
+        }
+        $informed = 0;
+        foreach ($this->payment['payment_methods'] ?? [] as $method) {
+            $informed += $this->previewCents($method['value'] ?? null) ?? 0;
+        }
+        $missing = Money::cents($total) - $informed;
+
+        return $missing > 0 ? Money::decimal($missing) : '';
     }
 
     public function removeMethod(int $index): void
@@ -139,14 +226,32 @@ class TitleDetail extends Component
         }
     }
 
+    public function requestSettle(): void
+    {
+        abort_if($this->installmentId === null || $this->paymentKey === null, 422);
+        $summary = $this->paymentSummary();
+        $number = $this->installment($this->installmentId)->installment_number;
+        $this->askConfirmation('settle', $this->installmentId, 'Parcela '.$number
+            .($summary['total'] === null ? '' : ' · total '.Display::money($summary['total'])));
+    }
+
     public function settle(TitleService $service): void
     {
         abort_if($this->installmentId === null || $this->paymentKey === null, 422);
+        $replay = $this->completedPayment !== null;
+        // Reenvio do mesmo pedido confirmado e idempotente; um pedido novo exige o modal.
+        if ($replay) {
+            $this->dismissConfirmation();
+        } else {
+            $this->consumeConfirmation('settle', $this->installmentId);
+        }
         $data = $this->completedPayment ?? [...$this->payment, 'idempotency_key' => $this->paymentKey];
         $service->settle($this->record(), $this->installment($this->installmentId), $data);
         // Manter chave e pedido apos sucesso permite repetir sem criar outra movimentacao.
         $this->completedPayment = $data;
-        session()->flash('status', 'Baixa confirmada. O recibo pode ser emitido separadamente no historico.');
+        Feedback::now(...$replay
+            ? ['info', 'Pedido já confirmado anteriormente.', 'O reenvio não criou outra baixa.']
+            : ['settled', 'Baixa realizada com sucesso!', 'O recibo pode ser emitido separadamente no histórico.']);
     }
 
     public function openReversal(int $id): void
@@ -156,7 +261,7 @@ class TitleDetail extends Component
             throw ValidationException::withMessages(['reversal' => 'Conclua ou descarte o estorno aberto antes de iniciar outro.']);
         }
         if ($settlement->reversal()->exists()) {
-            throw ValidationException::withMessages(['reversal' => 'Esta baixa ja foi estornada.']);
+            throw ValidationException::withMessages(['reversal' => 'Esta baixa já foi estornada.']);
         }
         $this->resetValidation();
         $this->reversalId = $id;
@@ -171,16 +276,33 @@ class TitleDetail extends Component
         $this->reversalKey = null;
         $this->completedReversal = null;
         $this->reversal = [];
+        $this->dismissConfirmation();
         $this->resetValidation();
+    }
+
+    public function requestReverse(): void
+    {
+        abort_if($this->reversalId === null || $this->reversalKey === null, 422);
+        $settlement = $this->settlement($this->reversalId);
+        $this->askConfirmation('reverse', $settlement->id, 'Baixa #'.$settlement->id.' · '
+            .$settlement->settlement_date->format('d/m/Y').' · '.Display::money($settlement->total_value));
     }
 
     public function reverse(SettlementReversalService $service): void
     {
         abort_if($this->reversalId === null || $this->reversalKey === null, 422);
+        $replay = $this->completedReversal !== null;
+        if ($replay) {
+            $this->dismissConfirmation();
+        } else {
+            $this->consumeConfirmation('reverse', $this->reversalId);
+        }
         $data = $this->completedReversal ?? [...$this->reversal, 'idempotency_key' => $this->reversalKey];
         $service->reverse($this->settlement($this->reversalId), $data);
         $this->completedReversal = $data;
-        session()->flash('status', 'Estorno confirmado. Historico preservado e recibos invalidados.');
+        Feedback::now(...$replay
+            ? ['info', 'Estorno já confirmado anteriormente.', 'O reenvio não criou outra movimentação.']
+            : ['reversed', 'Estorno realizado com sucesso!', 'Histórico preservado e recibos invalidados.']);
     }
 
     public function emitReceipt(int $id, ReceiptService $service): void
@@ -192,12 +314,12 @@ class TitleDetail extends Component
             if ($exception->getStatusCode() !== 404) {
                 throw $exception;
             }
-            throw ValidationException::withMessages(['receipt' => 'PDF ausente. A baixa foi preservada; o documento exige recuperacao explicita.']);
+            throw ValidationException::withMessages(['receipt' => 'PDF ausente. A baixa foi preservada; o documento exige recuperação explícita.']);
         } catch (FilesystemException $exception) {
             report($exception);
             throw ValidationException::withMessages(['receipt' => 'Falha no armazenamento do PDF. A baixa foi preservada; tente emitir novamente.']);
         }
-        session()->flash('status', 'Recibo '.$receipt->receipt_number.' disponivel para download.');
+        Feedback::now('receipt', 'Recibo emitido com sucesso!', $receipt->receipt_number.' disponível para download.');
     }
 
     public function openEdit(): void
@@ -234,7 +356,7 @@ class TitleDetail extends Component
         $changes = [];
         foreach ($this->edit as $field => $value) {
             if (! array_key_exists($field, $this->originalEdit)) {
-                throw ValidationException::withMessages([$field => 'Campo nao disponivel nesta edicao.']);
+                throw ValidationException::withMessages([$field => 'Campo não disponível nesta edição.']);
             }
             if ((string) $value !== (string) $this->originalEdit[$field]) {
                 $changes[$field] = $value === '' && in_array($field, [
@@ -245,14 +367,28 @@ class TitleDetail extends Component
         $changes = $this->normalizeRecurrenceChanges($changes);
         $service->update($this->record(), $changes);
         $this->closeEdit();
-        session()->flash('status', 'Titulo atualizado sem alterar a identidade das parcelas.');
+        Feedback::now('updated', 'Título alterado com sucesso!', 'A identidade das parcelas foi preservada.');
+    }
+
+    public function confirmCancel(): void
+    {
+        $title = $this->record();
+        // Pre-validacao para informar o motivo antes do modal; o Service revalida sob lock.
+        if ($title->status === 'cancelled') {
+            throw ValidationException::withMessages(['status' => 'O título já está cancelado.']);
+        }
+        if ($title->status === 'paid' || $title->settlements()->active()->exists()) {
+            throw ValidationException::withMessages(['status' => 'Título com baixas ativas não pode ser cancelado. Estorne as baixas primeiro.']);
+        }
+        $this->askConfirmation('cancel', $title->id, $title->title_number.' · '.$title->description);
     }
 
     public function cancel(TitleService $service): void
     {
-        $service->cancel($this->record());
+        $this->consumeConfirmation('cancel', $this->titleId);
+        $title = $service->cancel($this->record());
         $this->closeEdit();
-        session()->flash('status', 'Titulo cancelado. Historico preservado.');
+        Feedback::now('cancelled', 'Título cancelado com sucesso!', $title->title_number.' · histórico preservado.');
     }
 
     private function remaining(TitleInstallment $installment): string
@@ -352,6 +488,13 @@ class TitleDetail extends Component
         foreach ($title->installments as $installment) {
             $remaining[$installment->id] = $this->remaining($installment);
         }
+        // Historico em ordem crescente de parcela; na mesma parcela, pela data e ordem da baixa.
+        $numbers = $title->installments->pluck('installment_number', 'id');
+        $title->setRelation('settlements', $title->settlements->sortBy(fn ($settlement) => [
+            $numbers[$settlement->title_installment_id] ?? PHP_INT_MAX,
+            $settlement->settlement_date->toDateString(),
+            $settlement->id,
+        ])->values());
 
         return view('livewire.title-detail', [
             'title' => $title, 'remaining' => $remaining,

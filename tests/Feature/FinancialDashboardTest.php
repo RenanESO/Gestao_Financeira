@@ -99,7 +99,7 @@ class FinancialDashboardTest extends TestCase
     {
         $settlement = $this->movement(date: '2026-09-10');
         app(SettlementReversalService::class)->reverse($settlement, [
-            'idempotency_key' => (string) Str::uuid(), 'reversal_date' => '2026-10-15', 'reason' => 'Correcao',
+            'idempotency_key' => (string) Str::uuid(), 'reversal_date' => '2026-10-15', 'reason' => 'Correção',
         ]);
         $service = app(FinancialAnalyticsService::class);
         $this->assertSame(-10000, $service->analyze($this->filters())['totals']['income']);
@@ -142,7 +142,7 @@ class FinancialDashboardTest extends TestCase
         foreach (array_keys(FinancialAnalyticsService::GROUPINGS) as $grouping) {
             $component->set('filters.grouping', $grouping)->call('generateReport')->assertHasNoErrors()
                 ->assertSee('Relatório financeiro')->assertSee('Entradas realizadas')
-                ->assertSee('Saldo final do período')->assertSee('Solicitado por')
+                ->assertSee('Saldo líquido do período')->assertSee('Solicitado por')
                 ->assertSee('MoneyControl')->assertSee(auth()->user()->email)
                 ->assertSee('Subtotal')->assertDontSee('Nível');
         }
@@ -155,8 +155,8 @@ class FinancialDashboardTest extends TestCase
         Livewire::test(Titles::class, ['type' => 'receivable'])
             ->set('form.description', 'Completo')->set('form.original_value', '20.00')
             ->set('form.document_number', 'DOC-1')->set('form.reference', 'Referencia')
-            ->set('form.notes', 'Observacoes')->call('save')->assertHasNoErrors();
-        $this->assertDatabaseHas('titles', ['description' => 'Completo', 'document_number' => 'DOC-1', 'reference' => 'Referencia', 'notes' => 'Observacoes']);
+            ->set('form.notes', 'Observações')->call('save')->assertHasNoErrors();
+        $this->assertDatabaseHas('titles', ['description' => 'Completo', 'document_number' => 'DOC-1', 'reference' => 'Referencia', 'notes' => 'Observações']);
         foreach (['contas' => $this->account, 'categorias' => $this->category, 'contatos' => $this->contact, 'formas' => $this->method] as $module => $record) {
             $component = Livewire::test(Catalog::class, ['module' => $module]);
             $fields = array_keys($component->get('form'));
@@ -220,20 +220,154 @@ class FinancialDashboardTest extends TestCase
         $this->assertSame(['2026-10-10'], array_keys($data['movement_days']));
         $component = Livewire::test(FinancialDashboard::class);
         $html = $component->html();
-        preg_match('/<table[^>]*aria-label="Valores por data com movimentacao".*?<\/table>/s', $html, $matches);
-        $this->assertStringContainsString('2026-10-10', $matches[0]);
-        $this->assertStringNotContainsString('2026-10-09', $matches[0]);
-        $component->assertSee('2026-10-01')->assertSee('2026-10-31');
+        preg_match('/<table[^>]*aria-label="Valores por data com movimentação".*?<\/table>/s', $html, $matches);
+        $this->assertStringContainsString('10/10/2026', $matches[0]);
+        $this->assertStringNotContainsString('09/10/2026', $matches[0]);
+        $component->assertSee('01/10/2026 — 31/10/2026');
+    }
+
+    public function test_chips_apply_immediately_without_applying_pending_dates(): void
+    {
+        $this->movement(date: '2026-10-10');
+        Livewire::test(FinancialDashboard::class)
+            ->set('filters.end', '2026-09-01')
+            ->call('toggle', 'excluded_methods', $this->method->id)
+            ->assertHasNoErrors()
+            ->assertSet('applied.excluded_methods', [$this->method->id])
+            ->assertSet('applied.end', '2026-10-31')
+            ->assertSet('filters.end', '2026-09-01')
+            ->call('applyFilters')->assertHasErrors('end');
+    }
+
+    public function test_distribution_is_sorted_by_share_and_inactive_account_with_balance_stays_in_chart(): void
+    {
+        $other = app(CatalogService::class)->create(Category::class, ['name' => 'Aaa menor', 'type' => 'both']);
+        $this->movement(split: true);
+        $small = app(TitleService::class)->create([
+            'title_type' => 'receivable', 'description' => 'Pequeno', 'original_value' => '1.00',
+            'issue_date' => '2026-09-01', 'due_date' => '2026-10-10', 'category_id' => $other->id,
+        ]);
+        app(TitleService::class)->settle($small, $small->installments->sole(), [
+            'idempotency_key' => (string) Str::uuid(), 'settlement_date' => '2026-09-05', 'original_value' => '1.00',
+            'payment_methods' => [['payment_type_id' => $this->method->id, 'financial_account_id' => $this->otherAccount->id, 'value' => '1.00']],
+        ]);
+        app(TitleService::class)->settle($second = app(TitleService::class)->create([
+            'title_type' => 'receivable', 'description' => 'Pequeno 2', 'original_value' => '1.00',
+            'issue_date' => '2026-09-01', 'due_date' => '2026-10-10', 'category_id' => $other->id,
+        ]), $second->installments->sole(), [
+            'idempotency_key' => (string) Str::uuid(), 'settlement_date' => '2026-10-05', 'original_value' => '1.00',
+            'payment_methods' => [['payment_type_id' => $this->method->id, 'financial_account_id' => $this->account->id, 'value' => '1.00']],
+        ]);
+        $data = app(FinancialAnalyticsService::class)->analyze($this->filters());
+        $this->assertSame(['Servicos', 'Aaa menor'], array_column($data['categories'], 'label'));
+
+        // Reserva fica inativa e sem movimento em novembro, mas ainda guarda R$ 71,00.
+        app(CatalogService::class)->update($this->otherAccount, ['active' => false]);
+        $november = app(FinancialAnalyticsService::class)->analyze($this->filters(['start' => '2026-11-01', 'end' => '2026-11-30']));
+        $reserve = collect($november['accounts'])->firstWhere('id', $this->otherAccount->id);
+        $this->assertSame(7100, $reserve['opening']);
     }
 
     public function test_reversal_net_zero_date_is_still_a_movement_date(): void
     {
         $settlement = $this->movement(date: '2026-10-10');
         app(SettlementReversalService::class)->reverse($settlement, [
-            'idempotency_key' => (string) Str::uuid(), 'reversal_date' => '2026-10-10', 'reason' => 'Correcao',
+            'idempotency_key' => (string) Str::uuid(), 'reversal_date' => '2026-10-10', 'reason' => 'Correção',
         ]);
         $data = app(FinancialAnalyticsService::class)->analyze($this->filters());
         $this->assertSame(['2026-10-10' => ['income' => 0, 'expense' => 0]], $data['movement_days']);
+    }
+
+    public function test_account_balance_history_uses_opening_balance_prior_movements_and_reversals(): void
+    {
+        $this->account->update(['initial_balance' => '50.00']);
+        $this->movement(date: '2026-09-10');
+        $reversed = $this->movement(date: '2026-10-10');
+        $this->movement('payable', '2026-10-12');
+        app(SettlementReversalService::class)->reverse($reversed, [
+            'idempotency_key' => (string) Str::uuid(), 'reversal_date' => '2026-10-15', 'reason' => 'Correção',
+        ]);
+        $service = app(FinancialAnalyticsService::class);
+        $accounts = collect($service->analyze($this->filters())['accounts'])->keyBy('id');
+
+        $principal = $accounts[$this->account->id];
+        $this->assertSame(15000, $principal['opening']);
+        $this->assertSame([15000, 25000, 25000, 15000, 15000, 15000, 5000], array_slice($principal['values'], 8, 7));
+        $this->assertSame(5000, end($principal['values']));
+        $this->assertSame(array_fill(0, 31, 0), $accounts[$this->otherAccount->id]['values']);
+        $this->assertNotSame($principal['color'], $accounts[$this->otherAccount->id]['color']);
+
+        $filtered = $service->analyze($this->filters(['excluded_accounts' => [$this->otherAccount->id]]))['accounts'];
+        $this->assertSame([$this->account->id], array_column($filtered, 'id'));
+        Livewire::test(FinancialDashboard::class)->assertSee('Histórico de saldo por conta')->assertSee('Contas no gráfico');
+    }
+
+    public function test_account_history_filters_opening_period_and_reversal_without_removing_initial_balance(): void
+    {
+        $this->account->update(['initial_balance' => '50.00']);
+        $prior = $this->movement(date: '2026-09-10');
+        $this->movement(date: '2026-10-10', split: true);
+        app(SettlementReversalService::class)->reverse($prior, [
+            'idempotency_key' => (string) Str::uuid(), 'reversal_date' => '2026-10-15', 'reason' => 'Correção',
+        ]);
+        $otherContact = app(CatalogService::class)->create(Contact::class, ['name' => 'Outro', 'type' => 'both']);
+        $service = app(FinancialAnalyticsService::class);
+        foreach ([
+            ['excluded_categories' => [$this->category->id]],
+            ['excluded_methods' => [$this->method->id]],
+            ['contacts' => [$otherContact->id]],
+        ] as $filter) {
+            $data = $service->analyze($this->filters($filter));
+            $accounts = collect($data['accounts'])->keyBy('id');
+            $this->assertSame(5000, $accounts[$this->account->id]['opening']);
+            $this->assertSame(array_fill(0, 31, 5000), $accounts[$this->account->id]['values']);
+            $this->assertSame(array_fill(0, 31, 0), $accounts[$this->otherAccount->id]['values']);
+            $this->assertSame(0, $data['totals']['count']);
+        }
+        $data = $service->analyze($this->filters(['contacts' => [$this->contact->id, $otherContact->id]]));
+        $principal = collect($data['accounts'])->firstWhere('id', $this->account->id);
+        $this->assertSame(15000, $principal['opening']);
+        $this->assertSame(18000, $principal['values'][9]);
+        $this->assertSame(8000, $principal['values'][14]);
+        $this->assertSame($data['totals']['balance'], array_sum(array_map(
+            fn ($account) => end($account['values']) - $account['opening'], $data['accounts']
+        )));
+    }
+
+    public function test_account_history_combined_filters_keep_only_matching_movements(): void
+    {
+        $this->account->update(['initial_balance' => '50.00']);
+        $excludedCategory = $this->category;
+        $excludedMethod = $this->method;
+        $excludedContact = $this->contact;
+        $this->movement(date: '2026-09-10');
+        $this->movement(date: '2026-10-10');
+        $catalog = app(CatalogService::class);
+        $this->category = $catalog->create(Category::class, ['name' => 'Outra categoria', 'type' => 'both']);
+        $this->method = $catalog->create(PaymentType::class, ['name' => 'Outra forma', 'type' => 'both']);
+        $this->contact = $catalog->create(Contact::class, ['name' => 'Outro contato', 'type' => 'both']);
+        $this->movement(date: '2026-09-20', split: true);
+        $this->movement(date: '2026-10-01', split: true);
+        $this->movement('payable', '2026-10-31', split: true);
+        $this->movement(date: '2026-11-01');
+        $data = app(FinancialAnalyticsService::class)->analyze($this->filters([
+            'excluded_categories' => [$excludedCategory->id],
+            'excluded_methods' => [$excludedMethod->id],
+            'excluded_accounts' => [$this->otherAccount->id],
+            'contacts' => [$this->contact->id],
+        ]));
+        $this->assertNotSame($excludedContact->id, $this->contact->id);
+        $this->assertCount(1, $data['accounts']);
+        $principal = $data['accounts'][0];
+        $this->assertSame(8000, $principal['opening']);
+        $this->assertSame(11000, $principal['values'][0]);
+        $this->assertSame(8000, $principal['values'][30]);
+        $this->assertSame(2, $data['totals']['count']);
+        $this->assertSame(0, $data['totals']['balance']);
+        Livewire::test(FinancialDashboard::class)
+            ->call('toggle', 'excluded_methods', $this->method->id)
+            ->assertSet('applied.excluded_methods', [$this->method->id])
+            ->assertSee('saldo analítico');
     }
 
     public function test_empty_period_has_no_movement_dates_and_single_day_chart_renders(): void
@@ -243,6 +377,6 @@ class FinancialDashboardTest extends TestCase
         Livewire::test(FinancialDashboard::class)
             ->set('filters.start', '2026-10-22')->set('filters.end', '2026-10-22')
             ->call('applyFilters')->assertHasNoErrors()
-            ->assertSee('Nenhuma data com movimentacao')->assertSee('setas do teclado');
+            ->assertSee('Nenhuma data com movimentação')->assertSee('setas do teclado');
     }
 }

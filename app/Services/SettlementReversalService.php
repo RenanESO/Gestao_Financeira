@@ -27,7 +27,7 @@ class SettlementReversalService
         }
         foreach (array_keys($dados) as $campo) {
             if (! in_array($campo, ['idempotency_key', 'reversal_date', 'reason'], true)) {
-                $this->invalid((string) $campo, 'Campo nao permitido no estorno.');
+                $this->invalid((string) $campo, 'Campo não permitido no estorno.');
             }
         }
         $dados = Validator::make($dados, [
@@ -49,20 +49,20 @@ class SettlementReversalService
             $existente = SettlementReversal::where('idempotency_key', $dados['idempotency_key'])->lockForUpdate()->first();
             if ($existente !== null) {
                 if (! hash_equals($existente->request_hash, $hash)) {
-                    $this->invalid('idempotency_key', 'Esta chave ja foi usada em outro estorno.');
+                    $this->invalid('idempotency_key', 'Esta chave já foi usada em outro estorno.');
                 }
 
                 return $existente;
             }
             if ($baixa->reversal()->lockForUpdate()->first() !== null) {
-                $this->invalid('settlement_id', 'Baixa ja estornada. Reutilize a chave original para repetir o pedido.');
+                $this->invalid('settlement_id', 'Baixa já estornada. Reutilize a chave original para repetir o pedido.');
             }
             if ($dados['reversal_date'] < $baixa->settlement_date->toDateString()) {
-                $this->invalid('reversal_date', 'Estorno nao pode anteceder a baixa.');
+                $this->invalid('reversal_date', 'Estorno não pode anteceder a baixa.');
             }
             if ($titulo->status === 'cancelled' || $parcelas->count() !== $titulo->installments_count
                 || ! $parcelas->contains('id', $baixa->title_installment_id)) {
-                $this->invalid('installments', 'Titulo ou vinculo da parcela inconsistente.');
+                $this->invalid('installments', 'Título ou vínculo da parcela inconsistente.');
             }
             $total = 0;
             foreach ($parcelas as $indice => $parcela) {
@@ -74,7 +74,7 @@ class SettlementReversalService
                 Money::decimal($total, 'installments');
             }
             if ($total !== Money::cents($titulo->original_value)) {
-                $this->invalid('installments', 'Soma das parcelas diverge do titulo.');
+                $this->invalid('installments', 'Soma das parcelas diverge do título.');
             }
             $principal = Money::cents($baixa->original_value);
             $desconto = Money::cents($baixa->discount);
@@ -84,21 +84,21 @@ class SettlementReversalService
             foreach ($formas as $forma) {
                 $valor = Money::cents($forma->value);
                 if ($valor <= 0 || $forma->financialAccount === null || $forma->paymentType === null) {
-                    $this->invalid('settlement', 'Forma ou vinculo historico da baixa inconsistente.');
+                    $this->invalid('settlement', 'Forma ou vínculo histórico da baixa inconsistente.');
                 }
                 $somaFormas += $valor;
                 Money::decimal($somaFormas, 'settlement');
             }
             if ($principal <= 0 || $desconto > $principal || $totalBaixa <= 0
                 || $totalBaixa !== Money::cents($baixa->total_value) || $somaFormas !== $totalBaixa) {
-                $this->invalid('settlement', 'Valores historicos da baixa exigem reconciliacao.');
+                $this->invalid('settlement', 'Valores históricos da baixa exigem reconciliação.');
             }
 
             $this->cancelUnmovedGeneratedTitles($titulo);
             $recibos = Receipt::where('settlement_id', $baixa->id)->lockForUpdate()->get();
             // Uma referencia cruzada legada nao pode ser invalidada em nome de outro dono.
             if (DB::table('receipts')->where('settlement_id', $baixa->id)->count() !== $recibos->count()) {
-                $this->invalid('receipt', 'Recibo pertence a outro usuario.');
+                $this->invalid('receipt', 'Recibo pertence a outro usuário.');
             }
 
             $estorno = new SettlementReversal;
@@ -118,7 +118,7 @@ class SettlementReversalService
                 $pago = 0;
                 foreach ($parcela->settlements()->active()->lockForUpdate()->get() as $ativa) {
                     if ((int) $ativa->title_id !== (int) $titulo->id) {
-                        $this->invalid('installments', 'Baixa vinculada a outro titulo.');
+                        $this->invalid('installments', 'Baixa vinculada a outro título.');
                     }
                     $pago += Money::cents($ativa->original_value);
                 }
@@ -144,7 +144,7 @@ class SettlementReversalService
         $gerados = Title::withTrashed()->whereIn('generated_by_settlement_id',
             $titulo->settlements()->active()->select('title_settlements.id'))->lockForUpdate()->get();
         if ($titulo->is_recurring && $titulo->status === 'paid' && $gerados->isEmpty()) {
-            $this->invalid('recurrence', 'Recorrencia legada sem origem rastreavel exige reconciliacao antes do estorno.');
+            $this->invalid('recurrence', 'Recorrência legada sem origem rastreavel exige reconciliação antes do estorno.');
         }
         foreach ($gerados as $gerado) {
             if ($gerado->settlements()->lockForUpdate()->first() !== null
@@ -152,7 +152,7 @@ class SettlementReversalService
                     $gerado->settlements()->select('title_settlements.id'))->lockForUpdate()->first() !== null
                 || $gerado->status === 'paid' || $gerado->status === 'partial'
                 || $gerado->installments()->where('status', 'paid')->lockForUpdate()->first() !== null) {
-                $this->invalid('recurrence', 'O proximo ciclo possui historico. Trate a cadeia antes de estornar a origem.');
+                $this->invalid('recurrence', 'O próximo ciclo possui histórico. Trate a cadeia antes de estornar a origem.');
             }
             $gerado->installments()->update(['status' => 'cancelled']);
             $gerado->status = 'cancelled';

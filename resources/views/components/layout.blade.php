@@ -20,9 +20,9 @@
         <aside id="sidebar" :class="menu ? 'translate-x-0' : '-translate-x-full'" class="fixed inset-y-0 left-0 z-40 flex w-64 flex-col border-r border-base-content/10 bg-base-100 transition-transform lg:translate-x-0 print:hidden">
             <a href="{{ route('dashboard') }}" class="px-7 pt-8 pb-2 text-2xl font-bold">Money<span class="text-primary">Control</span></a>
             <p class="px-7 pb-8 muted">Seu financeiro, organizado.</p>
-            <nav class="flex-1 space-y-1 overflow-y-auto px-3" aria-label="Navegacao principal">
+            <nav class="flex-1 space-y-1 overflow-y-auto px-3" aria-label="Navegação principal">
                 @foreach([
-                    ['dashboard', [], 'Visao geral', 'o-squares-2x2'],
+                    ['dashboard', [], 'Visão geral', 'o-squares-2x2'],
                     ['financial.dashboard', [], 'Dashboard financeira', 'o-chart-bar'],
                     ['income', [], 'Receitas', 'o-arrow-trending-up'],
                     ['expenses', [], 'Despesas', 'o-arrow-trending-down'],
@@ -31,8 +31,8 @@
                     ['catalog', ['module' => 'categorias'], 'Categorias', 'o-tag'],
                     ['catalog', ['module' => 'formas'], 'Formas de pagamento', 'o-credit-card'],
                     ['receipts.index', [], 'Recibos', 'o-document-text'],
-                    ['notifications.index', [], 'Notificacoes', 'o-bell'],
-                    ['preferences', [], 'Preferencias', 'o-cog-6-tooth'],
+                    ['notifications.index', [], 'Notificações', 'o-bell'],
+                    ['preferences', [], 'Preferências', 'o-cog-6-tooth'],
                 ] as [$name, $params, $label, $icon])
                     @php($active = request()->routeIs($name) && (!isset($params['module']) || request()->route('module') === $params['module']))
                     <a href="{{ route($name, $params) }}" class="nav-link {{ $active ? 'active' : '' }}" @if($active) aria-current="page" @endif>
@@ -48,8 +48,8 @@
         </aside>
         <main class="mx-auto max-w-screen-2xl px-5 py-8 lg:ml-64 lg:px-10 print:ml-0 print:max-w-none print:p-0">
             <div class="mb-8 flex items-center justify-between gap-3 print:hidden">
-                <p class="eyebrow">Espaco financeiro</p>
-                <a class="btn btn-ghost btn-sm" href="{{ route('preferences') }}">Preferencias</a>
+                <p class="eyebrow">Espaço financeiro</p>
+                <a class="btn btn-ghost btn-sm" href="{{ route('preferences') }}">Preferências</a>
             </div>
             {{ $slot }}
         </main>

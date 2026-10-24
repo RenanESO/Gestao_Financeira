@@ -20,7 +20,7 @@ class FinancialDefaultsService
     {
         $models = ['categories' => Category::class, 'payment_types' => PaymentType::class];
         if ($grupo !== null && ! array_key_exists($grupo, $models)) {
-            throw new InvalidArgumentException('Grupo de cadastros nao suportado.');
+            throw new InvalidArgumentException('Grupo de cadastros não suportado.');
         }
 
         return DB::transaction(function () use ($usuario, $grupo, $models) {
@@ -31,7 +31,8 @@ class FinancialDefaultsService
                     continue;
                 }
                 foreach (config("financial_defaults.$nome", []) as $dados) {
-                    $existe = $model::withoutGlobalScope(OwnerScope::class)->where('user_id', $usuario->id)
+                    // Inclui excluidos logicamente: a exclusao feita pelo usuario nao e desfeita na inicializacao.
+                    $existe = $model::withoutGlobalScope(OwnerScope::class)->withTrashed()->where('user_id', $usuario->id)
                         ->whereRaw('LOWER(name) = LOWER(?)', [$dados['name']])->lockForUpdate()->first();
                     if ($existe !== null) {
                         continue;

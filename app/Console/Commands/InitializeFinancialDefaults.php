@@ -10,9 +10,9 @@ use Illuminate\Validation\ValidationException;
 
 class InitializeFinancialDefaults extends Command
 {
-    protected $signature = 'finance:initialize {user : ID de um usuario existente}';
+    protected $signature = 'finance:initialize {user : ID de um usuário existente}';
 
-    protected $description = 'Cria categorias e formas padrao somente quando ausentes, sem usuario de exemplo';
+    protected $description = 'Cria categorias e formas padrão somente quando ausentes, sem usuário de exemplo';
 
     public function handle(FinancialDefaultsService $service): int
     {

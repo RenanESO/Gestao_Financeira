@@ -13,7 +13,7 @@ final class Money
         if ((! is_string($valor) && ! is_int($valor))
             || ! preg_match('/^(0|[1-9][0-9]{0,12})(?:\.([0-9]{1,2}))?$/D', (string) $valor, $partes)) {
             throw ValidationException::withMessages([
-                $campo => 'Informe um valor nao negativo, sem separador de milhar e com ate duas casas decimais. Use string, nao float.',
+                $campo => 'Informe um valor não negativo, sem separador de milhar e com até duas casas decimais. Use string, não float.',
             ]);
         }
 

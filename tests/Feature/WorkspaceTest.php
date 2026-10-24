@@ -207,10 +207,12 @@ class WorkspaceTest extends TestCase
         $this->assertSame('SP', $contact->state);
         $this->assertSame('Contato preferencial', $contact->notes);
 
-        $component->call('archive', $contact->id);
+        $component->call('confirmDelete', $contact->id)->assertSet('confirmation.operation', 'delete');
+        $this->assertNotSoftDeleted('contacts', ['id' => $contact->id]);
+        $component->call('confirmOperation')->assertHasNoErrors()->assertSee('Contato excluído com sucesso!');
         $this->assertSoftDeleted('contacts', ['id' => $contact->id]);
 
-        $component->set('showArchived', true)->call('restore', $contact->id);
+        $component->set('showDeleted', true)->call('restore', $contact->id)->assertSee('Contato restaurado com sucesso!');
         $this->assertNull($contact->fresh()->deleted_at);
     }
 
@@ -265,7 +267,7 @@ class WorkspaceTest extends TestCase
             ->assertOk()
             ->assertSee('Saldo restante das parcelas')
             ->assertSee('R$ 60,00')
-            ->assertSee('Recebido no periodo')
+            ->assertSee('Recebido no período')
             ->assertSee('R$ 40,00');
     }
 
@@ -342,14 +344,15 @@ class WorkspaceTest extends TestCase
 
         $this->post(route('notifications.refresh'))
             ->assertRedirect()
-            ->assertSessionHas('status', '2 alerta(s) atualizado(s).');
+            ->assertSessionHas('feedback.message', 'Alertas atualizados com sucesso!')
+            ->assertSessionHas('feedback.detail', '2 alerta(s) novo(s).');
         $this->assertDatabaseCount('notifications', 2);
         $this->assertDatabaseHas('notifications', ['user_id' => $user->id, 'title' => 'Parcela vencida']);
         $this->assertDatabaseHas('notifications', ['user_id' => $user->id, 'title' => 'Parcela vencendo em breve']);
 
         $this->post(route('notifications.refresh'))
             ->assertRedirect()
-            ->assertSessionHas('status', 'Nenhum novo alerta encontrado para a antecedencia configurada.');
+            ->assertSessionHas('feedback.message', 'Nenhum novo alerta encontrado para a antecedência configurada.');
         $this->assertDatabaseCount('notifications', 2);
     }
 

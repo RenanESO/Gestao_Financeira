@@ -11,9 +11,11 @@ use App\Models\TitleInstallment;
 use App\Models\TitleSettlement;
 use App\Services\FinancialAccountService;
 use App\Services\NotificationService;
+use App\Support\Feedback;
 use App\Support\Money;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
@@ -112,11 +114,16 @@ class WorkspaceController extends Controller
         return view('titles', compact('type'));
     }
 
-    public function title(Title $title): View
+    public function title(Request $request, Title $title): View
     {
         Gate::authorize('view', $title);
+        // Atalhos da listagem: ?acao=baixa|estorno apenas abre o formulario correspondente.
+        $action = $request->query('acao');
 
-        return view('title', compact('title'));
+        return view('title', [
+            'title' => $title,
+            'action' => in_array($action, ['baixa', 'estorno'], true) ? $action : null,
+        ]);
     }
 
     public function receipts(): View
@@ -137,23 +144,26 @@ class WorkspaceController extends Controller
     public function read(Notification $notification, NotificationService $service): RedirectResponse
     {
         $service->markRead($notification);
+        Feedback::flash('success', 'Notificação marcada como lida com sucesso!');
 
-        return back()->with('status', 'Notificacao marcada como lida.');
+        return back();
     }
 
     public function readAll(NotificationService $service): RedirectResponse
     {
         $service->markAllRead();
+        Feedback::flash('success', 'Notificações marcadas como lidas com sucesso!');
 
-        return back()->with('status', 'Notificacoes marcadas como lidas.');
+        return back();
     }
 
     public function refreshNotifications(NotificationService $service): RedirectResponse
     {
         $created = $service->generateFor(auth()->user());
+        Feedback::flash(...$created === 0
+            ? ['info', 'Nenhum novo alerta encontrado para a antecedência configurada.']
+            : ['success', 'Alertas atualizados com sucesso!', $created.' alerta(s) novo(s).']);
 
-        return back()->with('status', $created === 0
-            ? 'Nenhum novo alerta encontrado para a antecedencia configurada.'
-            : $created.' alerta(s) atualizado(s).');
+        return back();
     }
 }

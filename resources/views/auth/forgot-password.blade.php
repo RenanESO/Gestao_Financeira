@@ -1,7 +1,7 @@
 <x-layout title="Recuperar senha">
     <section class="mx-auto max-w-md px-5 py-10"><div class="panel">
         <h1 class="page-title mb-3">Recuperar senha</h1>
-        <p class="muted mb-7">Informe seu e-mail para solicitar um link de redefinicao.</p>
+        <p class="muted mb-7">Informe seu e-mail para solicitar um link de redefinição.</p>
         <x-feedback />
         <form action="{{ route('password.email') }}" method="POST" class="space-y-5">
             @csrf

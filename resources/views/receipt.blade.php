@@ -17,13 +17,13 @@
 <body>
     <div class="header">
         <h1>RECIBO DE {{ $snapshot['title_type'] === 'receivable' ? 'RECEBIMENTO' : 'PAGAMENTO' }}</h1>
-        <p>{{ $snapshot['receipt_number'] }} | Emissao: {{ $snapshot['issue_date'] }}</p>
+        <p>{{ $snapshot['receipt_number'] }} | Emissão: {{ $snapshot['issue_date'] }}</p>
         <p>Responsavel: {{ $snapshot['owner'] }}</p>
     </div>
     <table>
-        <tr><th>Titulo / parcela</th><td>{{ $snapshot['title_number'] }} / {{ $snapshot['installment_number'] }}</td></tr>
-        <tr><th>Descricao</th><td>{{ $snapshot['description'] }}</td></tr>
-        <tr><th>Referencia</th><td>{{ $snapshot['reference'] }}</td></tr>
+        <tr><th>Título / parcela</th><td>{{ $snapshot['title_number'] }} / {{ $snapshot['installment_number'] }}</td></tr>
+        <tr><th>Descrição</th><td>{{ $snapshot['description'] }}</td></tr>
+        <tr><th>Referência</th><td>{{ $snapshot['reference'] }}</td></tr>
         <tr><th>Cliente / fornecedor</th><td>{{ $snapshot['contact'] }} {{ $snapshot['document'] }}</td></tr>
         <tr><th>Data da baixa</th><td>{{ $snapshot['settlement_date'] }}</td></tr>
         <tr><th>Principal desta baixa</th><td>{{ $snapshot['original_value'] }}</td></tr>
@@ -40,6 +40,6 @@
         @endforeach
     </table>
     <p>{{ $snapshot['notes'] }}</p>
-    <p class="footer">Comprovante interno do lancamento financeiro. Nao substitui documento fiscal.</p>
+    <p class="footer">Comprovante interno do lançamento financeiro. Não substitui documento fiscal.</p>
 </body>
 </html>

@@ -1,12 +1,12 @@
-<x-layout title="Notificacoes">
+<x-layout title="Notificações">
     <div class="flex flex-wrap items-center justify-between gap-4 mb-3">
-        <h1 class="page-title">Notificacoes</h1>
+        <h1 class="page-title">Notificações</h1>
         <div class="flex flex-wrap gap-2">
             <form method="POST" action="{{ route('notifications.refresh') }}">@csrf<button class="btn btn-primary btn-sm">Atualizar alertas</button></form>
             <form method="POST" action="{{ route('notifications.read-all') }}">@csrf<button class="btn btn-outline btn-sm">Marcar todas como lidas</button></form>
         </div>
     </div>
-    <p class="muted mb-7">Alertas internos de vencimento. Atualize agora ou aguarde a rotina diaria das 08:00. O historico permanece apos leitura ou pagamento.</p>
+    <p class="muted mb-7">Alertas internos de vencimento. Atualize agora ou aguarde a rotina diária das 08:00. O histórico permanece após leitura ou pagamento.</p>
     <x-feedback />
     <section class="panel">
         @forelse($notifications as $notification)
@@ -20,7 +20,7 @@
                     <form method="POST" action="{{ route('notifications.read-web', $notification) }}">@csrf<button class="btn btn-ghost btn-sm">Marcar como lida</button></form>
                 @else<span class="muted">Lida</span>@endif
             </article>
-        @empty<p class="py-8 text-center muted">Nenhuma notificacao por aqui.</p>@endforelse
+        @empty<p class="py-8 text-center muted">Nenhuma notificação por aqui.</p>@endforelse
         <div class="mt-5">{{ $notifications->links() }}</div>
     </section>
 </x-layout>

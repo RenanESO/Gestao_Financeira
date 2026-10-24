@@ -10,7 +10,7 @@ use Illuminate\Validation\ValidationException;
 
 class SendDueSoonNotifications extends Command
 {
-    protected $signature = 'notifications:send-due-soon {--user= : ID do usuario} {--date= : Corte Y-m-d}';
+    protected $signature = 'notifications:send-due-soon {--user= : ID do usuário} {--date= : Corte Y-m-d}';
 
     protected $description = 'Cria alertas internos de parcelas vencidas/proximas, sem duplicar reexecucoes';
 

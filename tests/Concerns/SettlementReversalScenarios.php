@@ -57,7 +57,7 @@ trait SettlementReversalScenarios
     {
         return array_replace([
             'idempotency_key' => (string) Str::uuid(), 'reversal_date' => '2026-10-16',
-            'reason' => 'Correcao de pagamento',
+            'reason' => 'Correção de pagamento',
         ], $dados);
     }
 

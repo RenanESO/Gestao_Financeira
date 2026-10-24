@@ -5,7 +5,7 @@
     @endforeach
     @if(!$group['children'])
         <div class="financial-report__table-wrap"><table class="financial-report__table">
-            <thead><tr><th>Data / evento</th><th>Titulo / descricao</th><th>Contato / categoria</th><th>Forma</th><th>Entradas</th><th>Saidas</th><th>Saldo</th></tr></thead>
+            <thead><tr><th>Data / evento</th><th>Título / descrição</th><th>Contato / categoria</th><th>Forma</th><th>Entradas</th><th>Saídas</th><th>Saldo</th></tr></thead>
             <tbody>
                 @foreach($group['rows'] as $row)
                     <tr>

@@ -39,7 +39,7 @@ class FinancialSchemaTest extends TestCase
     public function test_profile_defaults_are_persisted_by_the_database(): void
     {
         $id = DB::table('users')->insertGetId([
-            'name' => 'Usuario', 'email' => 'defaults@example.test', 'password' => 'hash',
+            'name' => 'Usuário', 'email' => 'defaults@example.test', 'password' => 'hash',
         ]);
         $usuario = User::findOrFail($id);
 
@@ -213,7 +213,7 @@ class FinancialSchemaTest extends TestCase
     {
         return [
             'user_id' => $usuarioId, 'title_number' => 'REC-0001', 'title_type' => 'receivable',
-            'description' => 'Titulo de teste', 'original_value' => '100.00',
+            'description' => 'Título de teste', 'original_value' => '100.00',
             'issue_date' => '2026-10-01', 'due_date' => '2026-10-31',
         ];
     }
@@ -247,7 +247,7 @@ class FinancialSchemaTest extends TestCase
             'issue_date' => '2026-10-15', 'pdf_path' => "receipts/{$usuario->id}/RCB-2026-0001.pdf",
         ]);
         $notificacao = DB::table('notifications')->insertGetId([
-            'user_id' => $usuario->id, 'title' => 'Vencimento', 'message' => 'Titulo proximo ao vencimento',
+            'user_id' => $usuario->id, 'title' => 'Vencimento', 'message' => 'Título próximo ao vencimento',
             'type' => 'warning', 'notifiable_type' => 'App\\Models\\Title', 'notifiable_id' => $titulo,
         ]);
 

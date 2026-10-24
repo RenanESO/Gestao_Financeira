@@ -14,8 +14,11 @@ class MigrationLifecycleTest extends TestCase
 
         $this->artisan('migrate', ['--force' => true])->assertExitCode(0);
         $this->assertTrue(Schema::hasTable('receipts'));
+        foreach (['categories', 'financial_accounts', 'payment_types'] as $tabela) {
+            $this->assertTrue(Schema::hasColumn($tabela, 'deleted_at'), $tabela);
+        }
 
-        $this->artisan('migrate:rollback', ['--step' => 14, '--force' => true])->assertExitCode(0);
+        $this->artisan('migrate:rollback', ['--step' => 15, '--force' => true])->assertExitCode(0);
 
         foreach (['categories', 'financial_accounts', 'contacts', 'payment_types', 'titles',
             'title_installments', 'title_settlements', 'title_settlement_methods', 'settlement_reversals', 'receipts', 'notifications', 'document_sequences'] as $tabela) {

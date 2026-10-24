@@ -42,12 +42,12 @@ class Title extends FinancialModel
 
     public function category(): BelongsTo
     {
-        return $this->belongsTo(Category::class);
+        return $this->belongsTo(Category::class)->withTrashed();
     }
 
     public function financialAccount(): BelongsTo
     {
-        return $this->belongsTo(FinancialAccount::class);
+        return $this->belongsTo(FinancialAccount::class)->withTrashed();
     }
 
     public function parent(): BelongsTo

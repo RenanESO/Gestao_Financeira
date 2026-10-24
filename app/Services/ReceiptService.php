@@ -34,7 +34,7 @@ class ReceiptService
                 $baixa = TitleSettlement::whereKey($baixa->getKey())->lockForUpdate()->firstOrFail();
                 Gate::authorize('view', $baixa);
                 if ($baixa->reversal()->lockForUpdate()->first() !== null) {
-                    $this->invalid('Baixa estornada nao permite emitir recibo.');
+                    $this->invalid('Baixa estornada não permite emitir recibo.');
                 }
                 if ($baixa->settlement_date->toDateString() > now()->toDateString()) {
                     $this->invalid('Aguarde a data da baixa para emitir recibo.');
@@ -52,7 +52,7 @@ class ReceiptService
                 $snapshot = $this->snapshot($baixa, $usuario);
                 $sequencia = DB::table('document_sequences')->where('name', 'receipts')->lockForUpdate()->first();
                 if ($sequencia === null || (int) $sequencia->last_number >= 99999999999) {
-                    $this->invalid('Sequencia de recibos indisponivel ou esgotada.');
+                    $this->invalid('Sequência de recibos indisponível ou esgotada.');
                 }
                 $numero = (int) $sequencia->last_number + 1;
                 $numeroRecibo = sprintf('RCB-%s-%06d', now()->format('Y'), $numero);
@@ -118,12 +118,12 @@ class ReceiptService
         if (! preg_match('/^users\/'.$recibo->user_id.'\/[a-f0-9-]{36}\.pdf$/D', $recibo->pdf_path)
             || ! preg_match('/^RCB-[0-9]{4}-[0-9]{6,11}$/D', $recibo->receipt_number)
             || $recibo->pdf_sha256 === null || $recibo->snapshot === null) {
-            $this->invalid('Recibo legado exige reconciliacao de arquivo e integridade.');
+            $this->invalid('Recibo legado exige reconciliação de arquivo e integridade.');
         }
-        abort_unless(Storage::disk('receipts')->exists($recibo->pdf_path), 404, 'PDF indisponivel.');
+        abort_unless(Storage::disk('receipts')->exists($recibo->pdf_path), 404, 'PDF indisponível.');
         $pdf = Storage::disk('receipts')->get($recibo->pdf_path);
         if (! is_string($pdf) || ! hash_equals($recibo->pdf_sha256, hash('sha256', $pdf))) {
-            $this->invalid('Integridade do PDF nao confere.');
+            $this->invalid('Integridade do PDF não confere.');
         }
 
         return $pdf;
@@ -135,7 +135,7 @@ class ReceiptService
         if ($titulo === null || $baixa->installment === null
             || (int) $baixa->installment->title_id !== (int) $titulo->id
             || ($titulo->contact_id !== null && $titulo->contact === null)) {
-            $this->invalid('Vinculos historicos da baixa inconsistentes.');
+            $this->invalid('Vínculos históricos da baixa inconsistentes.');
         }
         $soma = 0;
         $formas = [];
@@ -154,7 +154,7 @@ class ReceiptService
         $total = $principal - $desconto + Money::cents($baixa->interest) + Money::cents($baixa->fine);
         if ($principal <= 0 || $principal > Money::cents($baixa->installment->value) || $desconto > $principal
             || $total <= 0 || $total !== Money::cents($baixa->total_value) || $soma !== $total) {
-            $this->invalid('Valores historicos da baixa inconsistentes.');
+            $this->invalid('Valores históricos da baixa inconsistentes.');
         }
 
         return [

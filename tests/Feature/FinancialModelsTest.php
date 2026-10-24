@@ -292,7 +292,7 @@ class FinancialModelsTest extends TestCase
     private function titleData(string $numero): array
     {
         return [
-            'title_number' => $numero, 'title_type' => 'receivable', 'description' => 'Titulo de teste',
+            'title_number' => $numero, 'title_type' => 'receivable', 'description' => 'Título de teste',
             'original_value' => '100.10', 'issue_date' => '2026-10-01', 'due_date' => '2026-10-31',
         ];
     }
@@ -335,7 +335,7 @@ class FinancialModelsTest extends TestCase
             'pdf_path' => "receipts/{$usuario->id}/teste.pdf",
         ]);
         $ids[Notification::class] = DB::table('notifications')->insertGetId([
-            'user_id' => $usuario->id, 'title' => 'Vencimento', 'message' => 'Titulo proximo ao vencimento',
+            'user_id' => $usuario->id, 'title' => 'Vencimento', 'message' => 'Título próximo ao vencimento',
             'type' => 'warning', 'notifiable_type' => Title::class, 'notifiable_id' => $ids[Title::class],
         ]);
 

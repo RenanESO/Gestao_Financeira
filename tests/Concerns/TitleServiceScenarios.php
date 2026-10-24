@@ -357,10 +357,10 @@ trait TitleServiceScenarios
             'is_recurring' => true, 'recurrence_type' => 'monthly', 'recurrence_day' => 31,
         ]));
         $evento = 'eloquent.creating: '.Title::class;
-        Event::listen($evento, fn () => throw new RuntimeException('Falha na recorrencia.'));
+        Event::listen($evento, fn () => throw new RuntimeException('Falha na recorrência.'));
         try {
             $this->service()->settle($titulo, $titulo->installments->sole(), $this->settlementInput($conta, $forma));
-            $this->fail('Recorrencia deveria falhar.');
+            $this->fail('Recorrência deveria falhar.');
         } catch (RuntimeException) {
             $this->assertSame(0, TitleSettlement::count());
             $this->assertSame(0, TitleSettlementMethod::count());

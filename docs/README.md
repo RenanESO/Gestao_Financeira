@@ -3,12 +3,12 @@
 > Sistema web de gestão financeira pessoal desenvolvido em **Laravel 12 + Livewire 3 + MaryUI + Tailwind CSS**.  
 > Projetado para uso web e futuro aplicativo mobile, com banco de dados unificado.
 
-## Estado da Implementação (16/10/2026)
+## Estado da Implementação (24/10/2026)
 
 **Fase 1 em andamento:** Laravel 12 inicializado, dependências PHP instaladas e estrutura
 financeira criada em 11 migrations (perfil + dez tabelas), mais migrations de idempotência e estorno.
-As 17 migrations, incluindo
-infraestrutura, estão aplicadas no MySQL local. Os onze Models financeiros, relacionamentos,
+As 18 migrations, incluindo
+infraestrutura e a exclusão lógica de categorias/contas/formas (23/10/2026), estão aplicadas no MySQL local `gestao_financeira`. Os onze Models financeiros, relacionamentos,
 casts, soft deletes, escopo de proprietário e Policies estão implementados.
 `TitleService` implementa criação, parcelas, baixas parciais/totais, cancelamento e edição controlada;
 `RecurrenceService` calcula o próximo ciclo, criado atomicamente pelo `TitleService`.
@@ -21,12 +21,19 @@ reabre principal, invalida recibos existentes e trata próximos ciclos sem movim
 `ReceiptService` emite PDF privado com snapshot, hash e numeração global; download
 autorizado bloqueia estornos e arquivos inválidos. `NotificationService` gera alertas
 internos deduplicados por parcela/vencimento e permite marcar leitura ou atualização manual.
-Validação: **324 testes, 1446 assertions em SQLite**; MySQL: última regressão completa com **158 testes, 1003 assertions**, além de uma suíte focal da análise financeira.
+Validação: **368 testes, 1730 assertions em SQLite** (24/10/2026); focal MySQL de analytics:
+**1 teste, 18 assertions**, após aplicar a migration aditiva de 23/10 no banco de testes.
+A última regressão completa MySQL continua sendo **158 testes, 1003 assertions**, anterior
+a essa migration; a suíte completa ainda precisa ser reexecutada.
 
 A primeira interface está disponível: apresentação, login, registro, recuperação de senha,
 painel, dashboard financeira analítica, cadastros, receitas/despesas, detalhes de títulos, recibos e notificações.
 Registro cria atomicamente categorias/formas padrão, sem dados financeiros fictícios.
-Cadastros permitem criação/edição/desativação. Títulos permitem criação simples,
+Cadastros permitem criação/edição/desativação e exclusão lógica com confirmação e restauração.
+Listagens de títulos e cadastros têm **atalhos de arraste** (direita: baixa/editar; esquerda:
+cancelar ou estornar/excluir), sempre com revalidação no servidor e modal de confirmação para
+estorno, cancelamento e exclusão, além de botão flutuante de ajuda com tutorial dos gestos.
+Todas as mensagens usam um componente único com ícone por tipo de operação. Títulos permitem criação simples,
 parcelada ou recorrente (mensal/anual), consulta e edição controlada. A tela de detalhe
 permite baixar parcial/totalmente com até 20 formas e ajustes, confere o total antes do envio, estornar com motivo/data,
 cancelar sem baixas ativas e emitir/verificar recibo PDF separadamente.
@@ -153,6 +160,10 @@ O diagrama completo de entidades e relacionamentos está documentado em [`DATABA
 - Atalhos para títulos próximos ao vencimento (baixa rápida)
 - Cards com totais: Receitas, Despesas, Saldo Líquido
 
+> **Cadastros (itens 3 a 6):** arrastar o registro para a direita edita e para a esquerda exclui
+> (exclusão lógica, mediante confirmação, restaurável em "Mostrar excluídos"). Categorias, contas
+> e formas com vínculos financeiros não podem ser excluídas — devem ser desativadas.
+
 ### 3. 💳 Contas Financeiras
 - CRUD de contas (corrente, poupança, cartão de crédito, dinheiro, investimento)
 - Saldo inicial configurável
@@ -182,11 +193,14 @@ O diagrama completo de entidades e relacionamentos está documentado em [`DATABA
   - Valor original, número de parcelas
   - Datas de emissão e vencimento
   - Status: Pendente / Pago / Vencido / Cancelado / Parcial
-  - **Recorrência:** mensal (dia X) ou anual (dia X do mês Y) — ao dar baixa, o próximo vencimento é criado automaticamente
+  - **Recorrência:** mensal (dia X) ou anual (dia X do mês Y) — ao dar baixa, o próximo vencimento é criado automaticamente. Na inclusão, parcelas ficam fixas em 1 e o primeiro vencimento é calculado a partir da emissão e do dia/mês informados
   - Campos: Referência, Observação
   - Desconto / Juros / Multa ao realizar a baixa
 - Listagem com filtros: período, status, categoria, conta, contato
 - Baixa rápida via modal (preview + botão baixar + múltiplas formas de pagamento)
+- **Atalhos de arraste na listagem:** direita inicia a baixa (abre o formulário no detalhe);
+  esquerda cancela o título (sem baixa ativa) ou abre o estorno da última baixa ativa.
+  Estorno e cancelamento sempre pedem confirmação em modal; os botões continuam disponíveis.
 
 ### 8. 📤 Títulos a Pagar
 - Idêntico ao módulo de receber, vinculado a fornecedores
@@ -297,6 +311,7 @@ gestao-financeira/
 ├── docs/
 │   ├── DATABASE.md             # Diagrama e estrutura do banco
 │   ├── DEVELOPER_GUIDE.md      # Guia completo do desenvolvedor
+│   ├── AUDITORIA_SOFTDELETE.md # Auditoria de exclusão lógica por tabela
 │   └── AI_DEV_LOG.md           # Log de desenvolvimento por IA
 └── README.md                   # Apresentação e links da documentação
 ```
@@ -379,9 +394,28 @@ subtotais destacados, total geral, cores financeiras e linhas zebra. A versão i
 sempre usa página branca, informa o sistema emissor, usuário responsável e data/hora de
 emissão, independentemente do tema escuro/claro da aplicação. Não cria um PDF armazenado
 no servidor.
-O gráfico mantém todos os dias do período e permite consultar data, entradas e saídas
-com mouse, toque ou setas do teclado. **Ver valores por data** lista somente datas com
-movimentos, inclusive dias em que baixa e estorno se anulam.
+Os chips de categoria, forma, conta e contato valem no clique; as datas só entram em vigor
+em **Aplicar filtros**. O período aplicado aparece no canto superior da página.
+O gráfico de entradas e saídas mantém todos os dias do período, com eixos de valor e data,
+e permite consultar data, entradas, saídas e saldo do dia com mouse, toque ou setas do
+teclado; o cartão de detalhes acompanha a linha mais alta. **Ver valores por data** lista
+somente datas com movimentos, inclusive dias em que baixa e estorno se anulam.
+**Histórico de saldo por conta** mostra uma linha por conta financeira com o saldo ao fim
+de cada dia, acompanhando os filtros principais de período, conta, categoria, forma e contato.
+A abertura preserva o saldo inicial e soma os movimentos anteriores que atendem aos mesmos
+filtros; estornos entram na própria data. Com filtros restritivos, o resultado é um
+**saldo analítico**, não o saldo bancário completo. Os mini cards abaixo do gráfico,
+todos marcados por padrão, apenas escolhem quais linhas exibir e mostram saldo final
+e variação no período. As distribuições por
+categoria e forma aparecem da maior para a menor participação. Em celulares, os gráficos
+rolam na horizontal para manter os eixos legíveis.
+Os textos próprios das telas, mensagens financeiras e recibos receberam revisão de
+acentuação e ortografia em português brasileiro, sem renomear rotas, campos ou registros
+existentes. A tradução integral das mensagens nativas de validação é uma etapa separada.
+Campos editáveis de data preservam o seletor de calendário nativo (`type="date"`) e
+solicitam o locale brasileiro com `lang="pt-BR"`. O valor continua sendo enviado como
+`yyyy-mm-dd` para manter as regras e validações existentes; a apresentação visual
+respeita a localização suportada pelo navegador.
 Na lista de receitas/despesas, abra a descrição do título. No detalhe, escolha
 **Registrar baixa**, informe principal, ajustes e formas/contas e confirme.
 As formas precisam somar principal - desconto + juros + multa. O PDF é emitido
@@ -695,6 +729,7 @@ de infraestrutura; filas em `database` também precisam de `php artisan queue:wo
 
 - [`DATABASE.md`](DATABASE.md) — Diagrama ER e estrutura completa do banco
 - [`DEVELOPER_GUIDE.md`](DEVELOPER_GUIDE.md) — Guia detalhado de desenvolvimento
+- [`AUDITORIA_SOFTDELETE.md`](AUDITORIA_SOFTDELETE.md) — Auditoria de SoftDelete por tabela, exceções e pendências
 - [`AI_DEV_LOG.md`](AI_DEV_LOG.md) — Log de desenvolvimento pelos agentes de IA
 
 **Referências externas**

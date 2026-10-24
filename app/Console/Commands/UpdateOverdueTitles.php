@@ -10,9 +10,9 @@ use Illuminate\Validation\ValidationException;
 
 class UpdateOverdueTitles extends Command
 {
-    protected $signature = 'titles:update-overdue {--user= : Processar somente este usuario} {--date= : Data de corte Y-m-d}';
+    protected $signature = 'titles:update-overdue {--user= : Processar somente este usuário} {--date= : Data de corte Y-m-d}';
 
-    protected $description = 'Atualiza parcelas e titulos vencidos, preservando pagamentos e cancelamentos';
+    protected $description = 'Atualiza parcelas e títulos vencidos, preservando pagamentos e cancelamentos';
 
     public function handle(OverdueTitleService $service): int
     {

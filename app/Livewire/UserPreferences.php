@@ -3,6 +3,7 @@
 namespace App\Livewire;
 
 use App\Services\UserPreferencesService;
+use App\Support\Feedback;
 use Illuminate\Support\Facades\Auth;
 use Livewire\Component;
 
@@ -26,7 +27,7 @@ class UserPreferences extends Component
             'notification_days_before' => $this->notificationDaysBefore,
         ]);
 
-        session()->flash('status', 'Preferencias atualizadas.');
+        Feedback::now('updated', 'Preferências alteradas com sucesso!', 'O tema será aplicado nas próximas páginas abertas.');
         $this->dispatch('preferences-saved', theme: $this->theme);
     }
 

@@ -46,7 +46,7 @@ trait FinancialOperationsScenarios
     private function operationTitle(array $dados = []): Title
     {
         return app(TitleService::class)->create(array_replace([
-            'title_type' => 'receivable', 'description' => 'Operacao',
+            'title_type' => 'receivable', 'description' => 'Operação',
             'original_value' => '100.00', 'issue_date' => '2026-10-01', 'due_date' => '2026-10-31',
         ], $dados));
     }
@@ -66,7 +66,7 @@ trait FinancialOperationsScenarios
     {
         try {
             $operacao();
-            $this->fail('Operacao deveria rejeitar os dados.');
+            $this->fail('Operação deveria rejeitar os dados.');
         } catch (ValidationException $exception) {
             $this->assertArrayHasKey($campo, $exception->errors());
         }
@@ -256,8 +256,8 @@ trait FinancialOperationsScenarios
         $titulo = $this->operationTitle();
         $baixa = $this->operationPayment($titulo, $conta, $forma);
         $this->expectOperationValidation(fn () => app(TitleService::class)->update($titulo, ['original_value' => '50.00']), 'status');
-        $editado = app(TitleService::class)->update($titulo, ['description' => 'Descricao nova', 'notes' => 'Observacao']);
-        $this->assertSame('Descricao nova', $editado->description);
+        $editado = app(TitleService::class)->update($titulo, ['description' => 'Descrição nova', 'notes' => 'Observacao']);
+        $this->assertSame('Descrição nova', $editado->description);
         $this->assertSame('paid', $editado->status);
         $this->assertSame('100.00', $baixa->fresh()->original_value);
         $this->assertSame('100.00', $editado->installments->sole()->value);
@@ -302,7 +302,7 @@ trait FinancialOperationsScenarios
         });
         try {
             app(TitleService::class)->update($titulo, ['original_value' => '200.00']);
-            $this->fail('Edicao deveria falhar.');
+            $this->fail('Edição deveria falhar.');
         } catch (RuntimeException) {
             $this->assertSame('100.00', $titulo->fresh()->original_value);
             $this->assertSame(['50.00', '50.00'], $titulo->fresh()->installments->pluck('value')->all());
@@ -438,7 +438,7 @@ trait FinancialOperationsScenarios
         ] as $operacao) {
             try {
                 $operacao();
-                $this->fail('Operacao anonima deveria falhar.');
+                $this->fail('Operação anonima deveria falhar.');
             } catch (AuthenticationException) {
                 $this->assertNull(Auth::id());
             }

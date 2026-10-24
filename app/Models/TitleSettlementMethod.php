@@ -30,11 +30,11 @@ class TitleSettlementMethod extends FinancialModel
 
     public function paymentType(): BelongsTo
     {
-        return $this->belongsTo(PaymentType::class);
+        return $this->belongsTo(PaymentType::class)->withTrashed();
     }
 
     public function financialAccount(): BelongsTo
     {
-        return $this->belongsTo(FinancialAccount::class);
+        return $this->belongsTo(FinancialAccount::class)->withTrashed();
     }
 }

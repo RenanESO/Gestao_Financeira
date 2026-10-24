@@ -2,24 +2,37 @@
 
 namespace App\Livewire;
 
+use App\Livewire\Concerns\ConfirmsOperations;
 use App\Models\Category;
 use App\Models\Contact;
 use App\Models\FinancialAccount;
+use App\Models\FinancialModel;
 use App\Models\PaymentType;
 use App\Services\CatalogService;
+use App\Support\Feedback;
+use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Locked;
 use Livewire\Component;
 use Livewire\WithPagination;
 
 class Catalog extends Component
 {
+    use ConfirmsOperations;
     use WithPagination;
 
     public const MODULES = [
         'categorias' => [Category::class, 'Categorias', ['income' => 'Receita', 'expense' => 'Despesa', 'both' => 'Ambos']],
         'contatos' => [Contact::class, 'Contatos', ['client' => 'Cliente', 'supplier' => 'Fornecedor', 'both' => 'Ambos']],
-        'contas' => [FinancialAccount::class, 'Contas financeiras', ['checking' => 'Corrente', 'savings' => 'Poupanca', 'credit_card' => 'Cartao', 'cash' => 'Dinheiro', 'investment' => 'Investimento', 'other' => 'Outra']],
+        'contas' => [FinancialAccount::class, 'Contas financeiras', ['checking' => 'Corrente', 'savings' => 'Poupança', 'credit_card' => 'Cartão', 'cash' => 'Dinheiro', 'investment' => 'Investimento', 'other' => 'Outra']],
         'formas' => [PaymentType::class, 'Formas de pagamento', ['payment' => 'Pagamento', 'receipt' => 'Recebimento', 'both' => 'Ambos']],
+    ];
+
+    /** Nome singular e terminacao de genero usados nas mensagens ("Categoria excluida com sucesso!"). */
+    public const ENTITIES = [
+        'categorias' => ['Categoria', 'a'],
+        'contatos' => ['Contato', 'o'],
+        'contas' => ['Conta financeira', 'a'],
+        'formas' => ['Forma de pagamento', 'a'],
     ];
 
     #[Locked]
@@ -30,7 +43,7 @@ class Catalog extends Component
 
     public string $search = '';
 
-    public bool $showArchived = false;
+    public bool $showDeleted = false;
 
     public array $form = [];
 
@@ -41,12 +54,17 @@ class Catalog extends Component
         $this->clearForm();
     }
 
+    protected function confirmableOperations(): array
+    {
+        return ['delete' => 'delete'];
+    }
+
     public function updatedSearch(): void
     {
         $this->resetPage();
     }
 
-    public function updatedShowArchived(): void
+    public function updatedShowDeleted(): void
     {
         $this->resetPage();
     }
@@ -78,48 +96,112 @@ class Catalog extends Component
         }
     }
 
+    /**
+     * Botao "Editar" e atalho "arrastar para a direita". Registro excluido precisa ser restaurado antes.
+     */
     public function edit(int $id): void
     {
-        $record = self::MODULES[$this->module][0]::findOrFail($id);
+        $record = $this->record($id, true);
+        if ($record->trashed()) {
+            Feedback::now('error', 'Não foi possível editar o registro.', 'Registro excluído: restaure-o antes de editar.');
+
+            return;
+        }
+        Gate::authorize('update', $record);
         $this->clearForm();
         $this->editing = $record->id;
         foreach (array_keys($this->form) as $field) {
             $this->form[$field] = $record->$field ?? '';
         }
+        $this->dispatch('catalog-form-focus');
     }
 
     public function save(CatalogService $service): void
     {
         $model = self::MODULES[$this->module][0];
-        if ($this->editing === null) {
-            $service->create($model, $this->form);
+        $created = $this->editing === null;
+        if ($created) {
+            $record = $service->create($model, $this->form);
         } else {
-            $service->update($model::findOrFail($this->editing), $this->form);
+            $record = $service->update($model::findOrFail($this->editing), $this->form);
         }
         $this->clearForm();
-        session()->flash('status', 'Cadastro salvo.');
+        Feedback::now($created ? 'created' : 'updated', $this->message($created ? 'cadastrad' : 'alterad'), $record->name);
     }
 
     public function toggle(int $id, CatalogService $service): void
     {
-        $record = self::MODULES[$this->module][0]::findOrFail($id);
-        $service->update($record, ['active' => ! $record->active]);
-        session()->flash('status', $record->active ? 'Cadastro desativado. Historico preservado.' : 'Cadastro ativado.');
+        $record = $this->record($id);
+        $record = $service->update($record, ['active' => ! $record->active]);
+        Feedback::now($record->active ? 'activated' : 'deactivated',
+            $this->message($record->active ? 'ativad' : 'desativad'), $record->name.' · vínculos e histórico preservados.');
     }
 
-    public function archive(int $id, CatalogService $service): void
+    /**
+     * Botao "Excluir" e atalho "arrastar para a esquerda": somente abre a confirmacao.
+     */
+    public function confirmDelete(int $id, CatalogService $service): void
     {
-        abort_unless($this->module === 'contatos', 404);
-        $service->archive(Contact::findOrFail($id));
-        $this->clearForm();
-        session()->flash('status', 'Contato arquivado. O historico financeiro foi preservado.');
+        $record = $this->record($id, true);
+        if ($record->trashed()) {
+            Feedback::now('error', 'Não foi possível excluir o registro.', 'O registro já está excluído.');
+
+            return;
+        }
+        Gate::authorize('delete', $record);
+        if ($service->blocksDeletion($record)) {
+            Feedback::now('error', 'Não foi possível excluir o registro.', 'Este cadastro possui vínculos financeiros. Desative-o para preservar o histórico.');
+
+            return;
+        }
+        $this->askConfirmation('delete', $record->id, self::ENTITIES[$this->module][0].' · '.$record->name);
+    }
+
+    public function delete(int $id, CatalogService $service): void
+    {
+        $this->consumeConfirmation('delete', $id);
+        $record = $service->delete($this->record($id));
+        if ($this->editing === $id) {
+            $this->clearForm();
+        }
+        Feedback::now('deleted', $this->message('excluíd'), $record->name.' · restauração disponível em "Mostrar excluídos".');
     }
 
     public function restore(int $id, CatalogService $service): void
     {
-        abort_unless($this->module === 'contatos', 404);
-        $service->restore(Contact::withTrashed()->findOrFail($id));
-        session()->flash('status', 'Contato restaurado.');
+        $record = $service->restore($this->record($id, true));
+        Feedback::now('restored', $this->message('restaurad'), $record->name);
+    }
+
+    private function record(int $id, bool $withTrashed = false): FinancialModel
+    {
+        $model = self::MODULES[$this->module][0];
+
+        return ($withTrashed ? $model::withTrashed() : $model::query())->findOrFail($id);
+    }
+
+    private function message(string $verb): string
+    {
+        [$entity, $ending] = self::ENTITIES[$this->module];
+
+        return $entity.' '.$verb.$ending.' com sucesso!';
+    }
+
+    /**
+     * Dicas dos gestos; vinculos financeiros bloqueiam a exclusao de categorias, contas e formas.
+     */
+    private function shortcuts(FinancialModel $record): array
+    {
+        $blocked = ($record->titles_exists ?? false) || ($record->installments_exists ?? false)
+            || ($record->settlement_methods_exists ?? false);
+
+        return [
+            'right' => ['label' => 'Editar', 'icon' => 'o-pencil-square', 'tone' => 'info', 'method' => 'edit', 'args' => [$record->id]],
+            'left' => ($blocked
+                ? ['label' => 'Exclusão indisponível', 'icon' => 'o-lock-closed', 'tone' => 'neutral']
+                : ['label' => 'Excluir', 'icon' => 'o-trash', 'tone' => 'error']) + ['method' => 'confirmDelete', 'args' => [$record->id]],
+            'blocked' => $blocked,
+        ];
     }
 
     public function render()
@@ -127,14 +209,24 @@ class Catalog extends Component
         [$model, $title, $types] = self::MODULES[$this->module];
         $query = $model::query();
 
-        if ($this->module === 'contatos' && $this->showArchived) {
+        if ($this->showDeleted) {
             $query->withTrashed();
         }
+        $titles = fn ($relation) => $relation->withTrashed();
+        $query->withExists(match ($this->module) {
+            'categorias' => ['titles' => $titles],
+            'contas' => ['titles' => $titles, 'installments', 'settlementMethods'],
+            'formas' => ['settlementMethods'],
+            default => [],
+        });
+        $records = $query->where('name', 'like', '%'.mb_substr($this->search, 0, 100).'%')->orderBy('name')->paginate(12);
 
         return view('livewire.catalog', [
             'title' => $title,
+            'entity' => self::ENTITIES[$this->module][0],
             'types' => $types,
-            'records' => $query->where('name', 'like', '%'.mb_substr($this->search, 0, 100).'%')->orderBy('name')->paginate(12),
+            'records' => $records,
+            'shortcuts' => $records->getCollection()->mapWithKeys(fn ($record) => [$record->id => $this->shortcuts($record)]),
         ]);
     }
 }
