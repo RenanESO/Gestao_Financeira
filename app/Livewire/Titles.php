@@ -71,6 +71,7 @@ class Titles extends Component
     public function save(TitleService $service, RecurrenceService $recurrence): void
     {
         $data = $this->form;
+        $data['original_value'] = Display::internalDecimal($data['original_value'] ?? null);
         foreach (['category_id', 'contact_id', 'financial_account_id'] as $field) {
             $data[$field] = ($data[$field] ?? '') === '' ? null : $data[$field];
         }

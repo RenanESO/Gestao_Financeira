@@ -66,7 +66,7 @@
                 <label class="field">Documento<input class="input w-full" wire:model="form.document_number" maxlength="50"></label>
                 <label class="field">Referência<input class="input w-full" wire:model="form.reference" maxlength="255"></label>
                 <label class="field">Observações<textarea class="textarea w-full" wire:model="form.notes" maxlength="10000"></textarea></label>
-                <label class="field">Valor total<input class="input w-full" inputmode="decimal" wire:model="form.original_value" required placeholder="150.00"><span class="muted">Use ponto decimal e nenhum separador de milhar.</span></label>
+                <label class="field">Valor total<input class="input w-full" inputmode="decimal" wire:model="form.original_value" required placeholder="150,00"><span class="muted">Use vírgula decimal: 150,00.</span></label>
                 <label class="flex items-center gap-2 text-sm"><input class="checkbox checkbox-sm" type="checkbox" wire:model.live="form.is_recurring">Título recorrente</label>
                 {{-- wire:key distintos: sem eles o morph do Livewire reaproveita campos pela posicao e mistura os vínculos. --}}
                 @if($form['is_recurring'])

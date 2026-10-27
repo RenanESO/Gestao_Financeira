@@ -175,9 +175,9 @@ class TitleDetail extends Component
         $this->paymentKey = (string) Str::uuid();
         $this->completedPayment = null;
         $this->payment = [
-            'settlement_date' => now()->toDateString(), 'original_value' => $remaining,
-            'discount' => '0.00', 'interest' => '0.00', 'fine' => '0.00', 'notes' => '',
-            'payment_methods' => [['payment_type_id' => '', 'financial_account_id' => '', 'value' => $remaining]],
+            'settlement_date' => now()->toDateString(), 'original_value' => Display::decimalInput($remaining),
+            'discount' => '0,00', 'interest' => '0,00', 'fine' => '0,00', 'notes' => '',
+            'payment_methods' => [['payment_type_id' => '', 'financial_account_id' => '', 'value' => Display::decimalInput($remaining)]],
         ];
     }
 
@@ -215,7 +215,7 @@ class TitleDetail extends Component
         }
         $missing = Money::cents($total) - $informed;
 
-        return $missing > 0 ? Money::decimal($missing) : '';
+        return $missing > 0 ? Display::decimalInput(Money::decimal($missing)) : '';
     }
 
     public function removeMethod(int $index): void
@@ -246,6 +246,14 @@ class TitleDetail extends Component
             $this->consumeConfirmation('settle', $this->installmentId);
         }
         $data = $this->completedPayment ?? [...$this->payment, 'idempotency_key' => $this->paymentKey];
+        if (! $replay) {
+            foreach (['original_value', 'discount', 'interest', 'fine'] as $field) {
+                $data[$field] = Display::internalDecimal($data[$field] ?? null);
+            }
+            foreach ($data['payment_methods'] ?? [] as $index => $method) {
+                $data['payment_methods'][$index]['value'] = Display::internalDecimal($method['value'] ?? null);
+            }
+        }
         $service->settle($this->record(), $this->installment($this->installmentId), $data);
         // Manter chave e pedido apos sucesso permite repetir sem criar outra movimentacao.
         $this->completedPayment = $data;
@@ -338,6 +346,9 @@ class TitleDetail extends Component
         foreach ($this->edit as $field => $value) {
             $this->edit[$field] = $value ?? '';
         }
+        if (array_key_exists('original_value', $this->edit)) {
+            $this->edit['original_value'] = Display::decimalInput($this->edit['original_value']);
+        }
         $this->originalEdit = $this->edit;
         $this->editing = true;
     }
@@ -365,6 +376,9 @@ class TitleDetail extends Component
             }
         }
         $changes = $this->normalizeRecurrenceChanges($changes);
+        if (array_key_exists('original_value', $changes)) {
+            $changes['original_value'] = Display::internalDecimal($changes['original_value']);
+        }
         $service->update($this->record(), $changes);
         $this->closeEdit();
         Feedback::now('updated', 'Título alterado com sucesso!', 'A identidade das parcelas foi preservada.');
@@ -472,7 +486,7 @@ class TitleDetail extends Component
     private function previewCents(mixed $value): ?int
     {
         try {
-            return Money::cents($value);
+            return Money::cents(Display::internalDecimal($value));
         } catch (ValidationException) {
             return null;
         }

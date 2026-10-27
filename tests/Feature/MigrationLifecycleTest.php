@@ -14,11 +14,12 @@ class MigrationLifecycleTest extends TestCase
 
         $this->artisan('migrate', ['--force' => true])->assertExitCode(0);
         $this->assertTrue(Schema::hasTable('receipts'));
+        $this->assertTrue(Schema::hasColumn('users', 'branding'));
         foreach (['categories', 'financial_accounts', 'payment_types'] as $tabela) {
             $this->assertTrue(Schema::hasColumn($tabela, 'deleted_at'), $tabela);
         }
 
-        $this->artisan('migrate:rollback', ['--step' => 15, '--force' => true])->assertExitCode(0);
+        $this->artisan('migrate:rollback', ['--step' => 16, '--force' => true])->assertExitCode(0);
 
         foreach (['categories', 'financial_accounts', 'contacts', 'payment_types', 'titles',
             'title_installments', 'title_settlements', 'title_settlement_methods', 'settlement_reversals', 'receipts', 'notifications', 'document_sequences'] as $tabela) {
@@ -26,10 +27,12 @@ class MigrationLifecycleTest extends TestCase
         }
         $this->assertTrue(Schema::hasTable('users'));
         $this->assertFalse(Schema::hasColumn('users', 'theme'));
+        $this->assertFalse(Schema::hasColumn('users', 'branding'));
 
         $this->artisan('migrate', ['--force' => true])->assertExitCode(0);
         $this->assertTrue(Schema::hasTable('notifications'));
         $this->assertTrue(Schema::hasColumn('users', 'theme'));
+        $this->assertTrue(Schema::hasColumn('users', 'branding'));
 
         $this->artisan('migrate:reset', ['--force' => true])->assertExitCode(0);
         $this->assertFalse(Schema::hasTable('users'));

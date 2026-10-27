@@ -4,6 +4,21 @@ namespace App\Support;
 
 final class Display
 {
+    public static function decimalInput(mixed $value): mixed
+    {
+        return is_string($value) ? str_replace('.', ',', $value) : $value;
+    }
+
+    public static function internalDecimal(mixed $value): mixed
+    {
+        // Convert only unambiguous pt-BR strings; Money still validates precision and limits.
+        if (is_string($value) && preg_match('/^-?(?:0|[1-9][0-9]*|[1-9][0-9]{0,2}(?:\.[0-9]{3})+),[0-9]+$/D', $value)) {
+            return str_replace(',', '.', str_replace('.', '', $value));
+        }
+
+        return $value;
+    }
+
     public static function money(string $value): string
     {
         $cents = Money::signedCents($value);

@@ -162,11 +162,12 @@ class WorkspaceTest extends TestCase
     {
         $user = User::factory()->create();
         $component = Livewire::actingAs($user)->test(Catalog::class, ['module' => 'contas'])
-            ->set('form.name', 'Conta real')->set('form.initial_balance', '-10.50')->call('save')->assertHasNoErrors();
+            ->set('form.name', 'Conta real')->set('form.initial_balance', '-10,50')->call('save')->assertHasNoErrors();
         $account = FinancialAccount::sole();
         $this->assertSame($user->id, $account->user_id);
         $this->assertSame('-10.50', $account->initial_balance);
-        $component->call('edit', $account->id)->set('form.name', 'Conta editada')->call('save')->assertHasNoErrors();
+        $component->call('edit', $account->id)->assertSet('form.initial_balance', '-10,50')
+            ->set('form.name', 'Conta editada')->call('save')->assertHasNoErrors();
         $this->assertSame('Conta editada', $account->fresh()->name);
         $component->call('toggle', $account->id);
         $this->assertFalse($account->fresh()->active);
@@ -179,7 +180,7 @@ class WorkspaceTest extends TestCase
         $account = app(CatalogService::class)->create(FinancialAccount::class, ['name' => 'Foreign account', 'type' => 'cash']);
         $other = User::factory()->create();
         Livewire::actingAs($other)->test(Catalog::class, ['module' => 'contas'])
-            ->set('form.name', 'Bad')->set('form.initial_balance', '1,50')->call('save')->assertHasErrors('initial_balance');
+            ->set('form.name', 'Bad')->set('form.initial_balance', '1,234.56')->call('save')->assertHasErrors('initial_balance');
         $this->assertMissingRecord(fn () => Livewire::actingAs($other)->test(Catalog::class, ['module' => 'contas'])->call('edit', $account->id));
         $this->assertMissingRecord(fn () => Livewire::actingAs($other)->test(Catalog::class, ['module' => 'contas'])->call('toggle', $account->id));
     }

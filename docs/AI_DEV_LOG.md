@@ -1457,3 +1457,160 @@ O banco da aplicação não foi alterado nesta entrega.
 **Pendências / próximos passos:**
 1. A apresentação visual final de controles nativos depende do suporte de localização
    do navegador e do sistema operacional; `lang="pt-BR"` solicita o formato brasileiro.
+
+---
+
+## 2026-10-24 — Personalização individual inspirada no lpro
+
+**Data:** 2026-10-24
+
+**Autor:** Agente de IA
+
+**O que foi feito:**
+- Confirmado acesso ao projeto local `lpro`, consultado somente para leitura. A origem
+  usa Laravel 10, Livewire 3 e DaisyUI 4, com personalização global restrita ao master.
+- Usuário escolheu personalização individual neste projeto. Implementados nome, ícone,
+  exibição do nome e dez cores opcionais dentro de Preferências.
+- Mantida a stack instalada: Laravel 12, Livewire 3, MaryUI, Tailwind 4 e DaisyUI 5.
+  Nenhuma instalação nem mudança nos manifests/locks de dependências.
+- Variáveis CSS adaptadas à DaisyUI 5, cores hexadecimais validadas e contraste automático
+  preto/branco no conteúdo dos botões. Cores em branco preservam o tema original.
+- Ícones PNG/JPG/WebP privados, até 2 MB e 2048 × 2048 pixels; SVG rejeitado.
+  Endpoint autenticado lê exclusivamente o ícone do usuário atual, com `nosniff` e
+  sem cache. Substituição só apaga o arquivo anterior após commit.
+- Nome e ícone integrados ao layout/favicon; relatório HTML usa o nome escolhido.
+  Páginas públicas e recibos PDF já emitidos não recebem alterações.
+- Teste de ciclo das migrations passou de 15 para 16 passos de domínio/perfil para
+  incluir a migration nova, com assertions de remoção/recriação da coluna.
+
+**Arquivos de código alterados:**
+- `database/migrations/2026_10_24_000001_add_branding_to_users_table.php`
+- `app/Models/User.php`, `app/Services/BrandingService.php`, `app/Support/Branding.php`
+- `app/Livewire/BrandingPreferences.php`, `app/Http/Controllers/BrandingIconController.php`
+- `routes/web.php`, `resources/views/preferences.blade.php`
+- `resources/views/livewire/branding-preferences.blade.php`
+- `resources/views/components/brand.blade.php`, `resources/views/components/layout.blade.php`
+- `resources/views/livewire/financial-dashboard.blade.php`
+- `tests/Feature/BrandingPreferencesTest.php`, `tests/Feature/MigrationLifecycleTest.php`
+
+**Documentos atualizados:** `docs/README.md`, `docs/DEVELOPER_GUIDE.md`,
+`docs/DATABASE.md`, `docs/STATUS_DESENVOLVIMENTO.md` e este log.
+
+**Impacto no banco:** Adicionado JSON anulável `users.branding`, sem backfill ou alteração
+financeira, no MySQL da aplicação. Nenhum reset/rollback MySQL. A nova migration ainda
+precisa ser aplicada ao MySQL de testes. Arquivos de ícone usam o disco privado `local`.
+
+**Verificações:**
+- Regressão SQLite: **373 testes / 1767 assertions**, aprovada.
+- Focal personalização/preferências: **28 testes / 202 assertions**, aprovado.
+- Upload privado, troca/remoção, isolamento, SVG rejeitado, cores inválidas, restauração
+  e bloqueio de hóspedes cobertos pelos testes novos.
+- Primeira execução focal encontrou cache de rotas antigo; `route:clear` disponibilizou
+  o endpoint. Regressão inicial encontrou contagem fixa de rollback desatualizada;
+  ampliada cobertura para a migration nova, somente em SQLite em memória.
+- Build, Pint (9 arquivos), views e `git diff --check` aprovados.
+- Navegador em `/preferencias`: formulário carregado, hexadecimal sincronizou seletor,
+  restauração voltou ao padrão; nenhuma preferência da conta existente foi salva.
+- MySQL e validação visual mobile não reexecutados nesta etapa.
+
+**Pendências / próximos passos:**
+1. Aplicar migration aditiva ao banco exclusivo de testes e reexecutar a suíte MySQL.
+2. Conferir nome longo, ícone e cores nos temas claro/escuro e em dispositivos móveis.
+3. Retomar persistência de rascunhos e reconciliação pós-reload.
+
+---
+
+## 2026-10-24 — Cores reais na primeira abertura de Preferências
+
+**Data:** 2026-10-24
+
+**Autor:** Agente de IA
+
+**O que foi feito:**
+- Corrigido fallback `#808080` dos seletores quando o usuário não tem cores salvas.
+  A página já usava o tema, mas o formulário apresentava um cinza diferente.
+- Componente Alpine `themeColor` lê o CSS do tema ativo em escopo isolado, converte
+  OKLCH para hexadecimal sRGB com Canvas nativo e mostra a cor original no seletor
+  e como sugestão hexadecimal.
+- Mantido estado vazio para cores herdadas: primeiro save sem edição não altera o
+  tema nem cria overrides. Edição, limpeza e restauração continuam sincronizadas.
+- Sem dependência nova, alteração do lpro ou gravação em contas existentes.
+
+**Arquivos de código alterados:**
+- `resources/js/theme-color.js`, `resources/js/app.js`
+- `resources/views/livewire/branding-preferences.blade.php`
+- `tests/Feature/BrandingPreferencesTest.php`
+
+**Documentos atualizados:** `docs/README.md`, `docs/DEVELOPER_GUIDE.md`,
+`docs/STATUS_DESENVOLVIMENTO.md` e este log.
+
+**Impacto no banco:** Nenhum.
+
+**Verificações:**
+- Focal branding/workspace: **29 testes / 216 assertions**, incluindo primeiro save
+  sem editar cores nos temas claro e escuro.
+- Build Vite, compilação Blade e whitespace aprovados.
+- Navegador: primária inicial coincidiu com a cor aplicada; edição sincronizou seletor,
+  e reset restaurou a cor original. Não foram salvas preferências da conta existente.
+- Suíte completa e MySQL não reexecutados nesta correção de exibição.
+
+**Pendências / próximos passos:**
+1. Conferir a experiência em dispositivos móveis e continuar os próximos passos do status.
+
+---
+
+## 2026-10-26 — Adequação de entradas monetárias pt-BR com calendário preservado
+
+**Data:** 2026-10-26
+
+**Autor:** Agente de IA
+
+**O que foi feito:**
+- Lido integralmente o arquivo `prompt_adequacao_pt_BR.md` fornecido em Downloads.
+- Mapeados campos decimais: saldo inicial de conta, inclusão/edição de título, principal,
+  desconto, juros, multa e valores das formas. Inteiros de parcelas/dias/meses não mudam.
+- Reutilizado `Display` com conversão textual de entrada pt-BR para strings internas e
+  apresentação com vírgula. Sem float, arredondamento ou inserção automática de milhar.
+  `1.234,56` é convertido de forma não ambígua; entradas mistas inválidas não são corrigidas
+  silenciosamente. Mais de duas casas continuam proibidas em dinheiro.
+- Carregamento, edição, prévias e sugestões usam vírgula; payload enviado ao Service usa
+  ponto. Reenvio de baixa usa o snapshot interno bloqueado, sem reconversão.
+- Preservados controles, DOM, eventos, bindings, limites monetários e regras financeiras.
+  Não foram adicionadas dependências, migrations, botões nem campos.
+- Calendário nativo já tinha `lang="pt-BR"` e não foi alterado/recriado. Confirmada limitação
+  do Chromium em `en-US`: `lang` sozinho não força dia/mês. Critério visual fica pendente
+  de localização do navegador/sistema e validação manual; não foi declarado concluído.
+
+**Arquivos de código alterados:**
+- `app/Support/Display.php`
+- `app/Livewire/Catalog.php`, `app/Livewire/Titles.php`, `app/Livewire/TitleDetail.php`
+- `resources/views/livewire/catalog.blade.php`
+- `resources/views/livewire/titles.blade.php`, `resources/views/livewire/title-detail.blade.php`
+- `tests/Unit/DecimalInputTest.php`, `tests/Feature/PtBrFormTest.php`
+- `tests/Feature/WorkspaceTest.php`, `tests/Feature/TitleDetailTest.php`
+
+**Documentos atualizados:** `docs/README.md`, `docs/DEVELOPER_GUIDE.md`,
+`docs/DATABASE.md`, `docs/STATUS_DESENVOLVIMENTO.md` e este log.
+
+**Impacto no banco:** Nenhum; schema, queries, datas ISO e `DECIMAL(15,2)` preservados.
+Nenhuma operação financeira real salva no navegador. MySQL não reexecutado nesta etapa.
+
+**Verificações:**
+- Focal: **112 testes / 609 assertions**, aprovado.
+- Regressão SQLite: **410 testes / 1948 assertions**, aprovada.
+- Cobertos os sete decimais do prompt, zeros/nulos, negativos onde permitidos, valores
+  grandes, precisão extra rejeitada, criação/edição/salvamento, ajustes e soma de formas.
+- Testado o snapshot interno e reenvio idempotente; sem perda de precisão.
+- Datas 01/01/2026, 26/10/2026 e 31/12/2026 testadas com valores ISO do input nativo,
+  carregamento, edição e validação. Data impossível/vazio obrigatório rejeitados.
+- Build Vite, Pint, Blade cache e whitespace aprovados.
+- Browser em `en-US`: decimal `1.234,56` digitado normalmente; input de data preenchido
+  com ISO válido e API nativa de calendário disponível. Não confirmada seleção via popup
+  nem digitação manual em pt-BR. Alterações do formulário descartadas sem gravação.
+
+**Pendências / próximos passos:**
+1. Configurar Português (Brasil) no navegador e formato regional do sistema e conferir
+   dia/mês/ano, digitação e seleção pelo calendário existente.
+2. O aceite visual universal de data não pode ser garantido pelo HTML nativo sob as
+   restrições de preservar o componente. Manter essa limitação explícita.
+3. Retomar próximas etapas do status após essa conferência.

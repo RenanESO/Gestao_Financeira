@@ -1,6 +1,53 @@
 # Status do Desenvolvimento
 
-**Data:** 24/10/2026
+**Data:** 26/10/2026
+
+## Adequação de Formulários pt-BR
+
+Executada a parte monetária do arquivo `prompt_adequacao_pt_BR.md` fornecido em Downloads.
+Saldo inicial, valor do título, edição, principal/ajustes de baixa e valores das formas
+agora carregam/aceitam vírgula. Conversão centralizada em `Display`, só na fronteira
+com os Services; centavos, precisão, idempotência e persistência permanecem inalterados.
+Milhar não é inserido automaticamente; entrada brasileira `1.234,56` é aceita.
+Não foram substituídos componentes, bindings, botões, calendários ou layouts.
+
+Datas: `type="date"` e `lang="pt-BR"` já estavam configurados e foram preservados.
+No navegador de validação (`en-US`), a apresentação ainda é mês/dia. **Critério de
+aceite visual `dd/mm/yyyy` pendente:** exige configurar navegador/sistema para pt-BR
+e conferir digitação/seleção real. Não existe atributo nativo para forçar essa ordem
+em todos os navegadores sem contrariar a proibição de substituir o componente.
+
+Validação: **410 testes / 1948 assertions SQLite**; focal **112 testes / 609 assertions**;
+build, Pint e compilação de views aprovados. Browser confirmou entrada `1.234,56`,
+campo de data nativo e valor ISO válido, sem salvar dados reais. MySQL não reexecutado.
+Próximo ponto desta solicitação: validar calendário/digitação com navegador localizado
+em Português (Brasil). Não considerar esse critério cumprido apenas por `lang="pt-BR"`.
+
+## Personalização Individual
+
+Correção da primeira abertura: contas novas agora exibem nos seletores as cores reais
+do tema ativo, com hexadecimal original como sugestão. Removido o fallback cinza fixo;
+cores originais não são gravadas como personalizações ao salvar sem editar.
+Edição e restauração preservadas. Validação desta correção: **29 testes / 216 assertions**
+focais, build e views aprovados; navegador confirmou cor inicial, sincronização e reset
+sem salvar alterações na conta existente. Nenhuma mudança no banco ou nas dependências.
+
+Concluída a adaptação da personalização visual do projeto local `lpro`, consultado
+somente para leitura, sem instalar pacotes nem alterar stacks. Conforme escolha do
+usuário, as preferências são individuais: nome, ícone, exibição do nome e dez cores
+em **Preferências > Personalização do sistema**. O tema claro/escuro continua disponível.
+Ícones privados (PNG/JPG/WebP) são acessíveis somente pelo próprio usuário; nome/favicons
+autenticados e relatório HTML usam a identidade escolhida. Páginas públicas e recibos
+PDF emitidos permanecem inalterados.
+
+Migration aditiva de `users.branding` aplicada no MySQL da aplicação: agora 19 migrations.
+Sem alteração de dados financeiros. Antes da próxima suíte MySQL, aplicar essa migration
+ao banco exclusivo de testes. Validação desta etapa: **373 testes / 1767 assertions
+SQLite**, focal preferências/personalização **28 testes / 202 assertions**; build, Pint,
+compilação de views e whitespace aprovados. Navegador confirmou formulário,
+sincronização hexadecimal/seletor e restauração, sem salvar alterações na conta existente.
+Próximo ponto: conferir personalização em dispositivos móveis e retomar rascunhos/
+reconciliação pós-reload, sem refazer os fluxos financeiros.
 
 ## Atualização de Campos de Data
 
@@ -48,7 +95,7 @@ sem alterar identificadores técnicos nem dados existentes.
 
 Já implementado:
 
-- MySQL 8.0+ com 18 migrations aplicadas em `gestao_financeira`; em 24/10 o banco `gestao_financeira_testing` foi encontrado e recebeu a migration de SoftDelete pendente.
+- MySQL 8.0+ com 19 migrations aplicadas em `gestao_financeira`; o banco `gestao_financeira_testing` recebeu SoftDelete, mas ainda precisa da migration de branding.
 - Models, relacionamentos, casts, soft deletes, `OwnerScope` e Policies.
 - `Money` com centavos exatos, incluindo valores assinados para saldo.
 - `TitleService`: criação, parcelas, baixas parciais/totais, idempotência, cancelamento e edição controlada.
@@ -120,12 +167,12 @@ nem criar usuários de demonstração.
 
 ## Validação Atual
 
-- SQLite: **368 testes aprovados, 1730 assertions** (24/10/2026), incluindo os novos cenários de saldo filtrado.
+- SQLite: **410 testes aprovados, 1948 assertions** (26/10/2026), incluindo saldo filtrado, personalização e formulários pt-BR.
 - Focal MySQL de analytics: **1 teste / 18 assertions** (24/10/2026), com precisão decimal, abertura filtrada, saldo inicial e estornos.
 - Pint (44 arquivos), cache de views, build e `git diff --check` aprovados nesta entrega.
 - Testes finais executados com `APP_CONFIG_CACHE` apontando para caminho temporário inexistente: o cache da aplicação causou falhas de ambiente/CSRF na primeira execução. Cache original preservado.
 - O teste de replay agora compara HTML decodificado do JSON Livewire para suportar mensagens acentuadas.
-- Navegador não reexecutado nesta entrega; as verificações Edge abaixo são históricas.
+- Na etapa de saldo filtrado, navegador não reexecutado; nesta etapa de personalização, formulário e restauração foram conferidos. As verificações Edge de impressão abaixo são históricas.
 - Edge headless (23/10/2026, SQLite temporário fora do projeto): 22 verificações de gestos, modais, notificações, tutorial, toque em 375px, rolagem vertical sem disparo e console sem erros, nos temas claro e escuro.
 - A suíte completa MySQL não foi reexecutada após a migration de 23/10/2026; somente o focal de analytics foi validado em 24/10.
 - MySQL: **158 testes aprovados, 1003 assertions na execução final**.
@@ -162,7 +209,7 @@ nem criar usuários de demonstração.
 Retomar pelo **refinamento das operações disponíveis, responsividade e cobertura de
 integração**, mantendo as preferências e indicadores já entregues.
 
-1. Reexecutar a suíte completa MySQL em `gestao_financeira_testing`, isolando o cache de configuração; o focal de analytics já passou.
+1. Aplicar a migration aditiva de branding ao banco `gestao_financeira_testing` e reexecutar a suíte completa MySQL com configuração isolada; o focal histórico de analytics passou antes dessa alteração.
 2. Preservar rascunhos e reconciliar pedidos após recarregar a página, sem enfraquecer UUID/hash de idempotência.
 3. Validar gestos e modais com leitor de tela e em dispositivos reais; avaliar tradução integral das mensagens nativas de validação Laravel.
 4. Validar viewport mobile/acessibilidade da dashboard e das operações financeiras, incluindo relatório longo e impressão.

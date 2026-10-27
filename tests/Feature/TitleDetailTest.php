@@ -109,7 +109,7 @@ class TitleDetailTest extends TestCase
         $key = $component->get('paymentKey');
         $component->call('closePayment')->call('openPayment', $this->title->installments->first()->id);
         $this->assertNotSame($key, $component->get('paymentKey'));
-        $component->assertSet('payment.original_value', '70.00')
+        $component->assertSet('payment.original_value', '70,00')
             ->set('payment.payment_methods.0.payment_type_id', $this->method->id)
             ->set('payment.payment_methods.0.financial_account_id', $this->account->id)
             ->call('requestSettle')->call('confirmOperation')->assertHasNoErrors();
@@ -446,7 +446,7 @@ class TitleDetailTest extends TestCase
     {
         $component = $this->payment($this->detail())
             ->set('payment.interest', '5.00')->set('payment.payment_methods.0.value', '30.00')
-            ->call('addMethod')->assertSet('payment.payment_methods.1.value', '75.00')
+            ->call('addMethod')->assertSet('payment.payment_methods.1.value', '75,00')
             ->call('addMethod')->assertSet('payment.payment_methods.2.value', '');
         $component->call('removeMethod', 2)
             ->set('payment.payment_methods.1.payment_type_id', $this->method->id)

@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AuthController;
+use App\Http\Controllers\BrandingIconController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ReceiptController;
 use App\Http\Controllers\WorkspaceController;
@@ -20,6 +21,7 @@ Route::middleware('guest')->group(function () {
 });
 
 Route::middleware('auth')->group(function () {
+    Route::get('/personalizacao/icone', BrandingIconController::class)->name('branding.icon');
     Route::post('/sair', [AuthController::class, 'logout'])->name('logout');
     Route::get('/painel', [WorkspaceController::class, 'dashboard'])->name('dashboard');
     Route::view('/dashboard-financeira', 'financial-dashboard')->name('financial.dashboard');

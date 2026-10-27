@@ -9,6 +9,7 @@ use App\Models\FinancialAccount;
 use App\Models\FinancialModel;
 use App\Models\PaymentType;
 use App\Services\CatalogService;
+use App\Support\Display;
 use App\Support\Feedback;
 use Illuminate\Support\Facades\Gate;
 use Livewire\Attributes\Locked;
@@ -79,7 +80,7 @@ class Catalog extends Component
             $this->form['icon'] = '';
         }
         if ($this->module === 'contas') {
-            $this->form['initial_balance'] = '0.00';
+            $this->form['initial_balance'] = '0,00';
         }
         if ($this->module === 'contatos') {
             $this->form += [
@@ -113,6 +114,9 @@ class Catalog extends Component
         foreach (array_keys($this->form) as $field) {
             $this->form[$field] = $record->$field ?? '';
         }
+        if ($this->module === 'contas') {
+            $this->form['initial_balance'] = Display::decimalInput($this->form['initial_balance']);
+        }
         $this->dispatch('catalog-form-focus');
     }
 
@@ -120,10 +124,14 @@ class Catalog extends Component
     {
         $model = self::MODULES[$this->module][0];
         $created = $this->editing === null;
+        $data = $this->form;
+        if ($this->module === 'contas') {
+            $data['initial_balance'] = Display::internalDecimal($data['initial_balance'] ?? null);
+        }
         if ($created) {
-            $record = $service->create($model, $this->form);
+            $record = $service->create($model, $data);
         } else {
-            $record = $service->update($model::findOrFail($this->editing), $this->form);
+            $record = $service->update($model::findOrFail($this->editing), $data);
         }
         $this->clearForm();
         Feedback::now($created ? 'created' : 'updated', $this->message($created ? 'cadastrad' : 'alterad'), $record->name);

@@ -6,7 +6,7 @@
     <div class="grid gap-5 md:grid-cols-3">
         @foreach([['income', 'Receitas em aberto', $receivables, 'o-arrow-trending-up'], ['expenses', 'Despesas em aberto', $payables, 'o-arrow-trending-down'], ['notifications.index', 'Alertas não lidos', $unread, 'o-bell']] as [$route, $label, $count, $icon])
             <a href="{{ route($route) }}" class="panel transition-colors hover:border-primary/40">
-                <div class="flex items-center justify-between"><p class="muted">{{ $label }}</p><x-mary-icon :name="$icon" class="h-5 w-5 text-primary" /></div>
+                <div class="flex items-center justify-between"><p class="muted">{{ $label }}</p><x-mary-icon :name="$icon" class="h-5 w-5 text-base-content" /></div>
                 <p class="mt-4 text-4xl font-bold">{{ $count }}</p>
                 <p class="muted mt-3">Abrir detalhes &rarr;</p>
             </a>
@@ -30,7 +30,7 @@
                 ['Pago no período', $periodSettled['payable'], 'o-credit-card'],
             ] as [$label, $value, $icon])
                 <div class="panel">
-                    <div class="flex items-center justify-between"><p class="muted">{{ $label }}</p><x-mary-icon :name="$icon" class="h-5 w-5 text-primary" /></div>
+                    <div class="flex items-center justify-between"><p class="muted">{{ $label }}</p><x-mary-icon :name="$icon" class="h-5 w-5 text-base-content" /></div>
                     <p class="mt-4 text-2xl font-bold">{{ \App\Support\Display::money(\App\Support\Money::signedDecimal($value)) }}</p>
                 </div>
             @endforeach

@@ -42,7 +42,7 @@ O fluxo do zero (pré-requisitos, `.env`, migrations, `storage:link`, build de a
 - A migration `2026_10_23_000001` adiciona `deleted_at` (exclusão lógica) a `categories`, `financial_accounts` e `payment_types`. Ver [AUDITORIA_SOFTDELETE.md](AUDITORIA_SOFTDELETE.md).
 - `User` inclui `avatar`, `theme` e `notification_days_before`; novos usuários usam tema `dark` e antecedência de 7 dias, com cast inteiro.
 - `.env.example` referencia MoneyControl, MySQL e Redis (`CACHE_STORE`, não `CACHE_DRIVER`). O `.env` local usa MySQL e mantém cache/sessão/filas em `database`.
-- O ambiente disponível tem PHP 8.2.0 com `pdo_mysql` e SQLite, além de MySQL 8.0.31 instalado e em execução no Wamp. O banco `gestao_financeira` recebeu as 18 migrations (a de 23/10/2026 adiciona `deleted_at` aos cadastros). Em 23/10/2026 o banco `gestao_financeira_testing` não existia nesta máquina; criá-lo conforme [Testes de Integração MySQL](#testes-de-integração-mysql) antes de rodar `phpunit.mysql.xml`. Redis/`phpredis` continuam pendentes. PHP 8.3+ continua sendo o requisito alvo, embora o skeleton ainda declare `^8.2`.
+- O ambiente disponível tem PHP 8.2.0 com `pdo_mysql` e SQLite, além de MySQL 8.0.31 instalado e em execução no Wamp. O banco `gestao_financeira` recebeu as 19 migrations, incluindo SoftDelete e branding individual. O banco `gestao_financeira_testing` existe e recebeu SoftDelete; ainda precisa da migration de branding antes da próxima execução MySQL. Consulte [Testes de Integração MySQL](#testes-de-integração-mysql). Redis/`phpredis` continuam pendentes. PHP 8.3+ continua sendo o requisito alvo, embora o skeleton ainda declare `^8.2`.
 - Livewire 3.8.10 e MaryUI 2.9 instalados em produção. Tailwind 4 e daisyUI 5 são a combinação atual compatível com MaryUI 2.9, substituindo o alvo anterior Tailwind 3. Vite 6.4.4/plugin Laravel Vite 1 funcionam com Node 20.13.1. Breeze 2.4 permanece somente em desenvolvimento; seu instalador não foi executado para evitar sobrescrever rotas/layouts.
 - Onze Models financeiros, relacionamentos, casts, soft deletes e isolamento por proprietário estão implementados, com `FinancialRecordPolicy`, `TitlePolicy` e `TitleSettlementPolicy`.
 - `TitleService`, `RecurrenceService` e `Money` implementam títulos/parcelas, baixas parciais/totais, idempotência, cancelamento, edição controlada e recorrência.
@@ -63,7 +63,7 @@ php vendor/bin/pint --test app/Models app/Policies app/Services app/Support app/
 php vendor/bin/phpunit --configuration phpunit.mysql.xml
 ```
 
-Resultado atual: **368 testes aprovados, 1730 assertions em SQLite** (24/10/2026) e
+Resultado atual: **410 testes aprovados, 1948 assertions em SQLite** (26/10/2026) e
 **158 testes aprovados, 1003 assertions na última execução em MySQL** (anterior à migration de 23/10/2026).
 Em 24/10/2026 o focal `MySqlFinancialAnalyticsTest` passou com **1 teste / 18 assertions**;
 a migration aditiva de SoftDelete já existente foi aplicada somente ao banco de testes.
@@ -159,8 +159,22 @@ leitura agregada consistente se crescer o volume, sem remover a proteção atual
 usam `#[Locked]`; todos os IDs de ações são recarregados sob escopo de proprietário.
 Os componentes delegam criação/edição/desativação a `CatalogService` e criação de
 títulos a `TitleService`. Validações dos Services aparecem no resumo de erros da tela.
-Valores monetários são strings com ponto decimal, sem milhar; `Display::money()`
-formata em BRL usando centavos inteiros. Nenhum cálculo da interface usa float.
+Nos formulários, valores monetários são strings com vírgula decimal. Na fronteira com
+os Services, continuam strings com ponto e sem milhar. `Display::money()` formata
+listagens em BRL usando centavos inteiros. Nenhum cálculo da interface usa float.
+
+`Display::decimalInput()` carrega valores internos para os campos sem inserir milhar.
+`Display::internalDecimal()` converte somente strings pt-BR não ambíguas, como `1500,75`
+e `1.234,56`, preservando todos os dígitos. Vazio/nulo e entradas inválidas não são
+coagidos para zero. A compatibilidade com strings ISO existentes é preservada.
+`Money` mantém validação de até duas casas, sinal e limites; não há arredondamento.
+Precisão maior pode ser convertida pelo helper, mas não aceita em campos monetários.
+`Catalog` normaliza saldo inicial somente na gravação; `Titles` normaliza valor na
+criação; `TitleDetail` normaliza edição, prévia de baixa e payload de baixa antes de
+enviar ao Service. Baseline de edição usa a mesma apresentação do formulário.
+O snapshot bloqueado de baixa concluída fica no formato interno e não é renormalizado
+em replays, preservando idempotência. Input inválido continua disponível para correção.
+Bindings `.live.debounce.300ms`, controles, datas, IDs e layout foram mantidos.
 
 O layout está em `resources/views/components/layout.blade.php`, com navegação lateral,
 menu recolhível e estados vazios. Alpine é fornecido pelo Livewire, sem segunda
@@ -253,7 +267,8 @@ com indicação "Vencida há N dia(s)", "Vence hoje" ou "Vence em N dia(s)" em r
 `WorkspaceController` calcula valores do painel em centavos: parcelas abertas no mês
 usam principal restante; baixas realizadas entram pela data da baixa e estornos no
 mesmo período reduzem o total realizado. Os próximos compromissos mostram o saldo
-restante, não o valor original. Valores são strings com ponto decimal; nenhum formulário calcula com float.
+restante, não o valor original. Campos de entrada usam vírgula; totais e cálculos
+internos usam strings com ponto e centavos inteiros, sem float.
 `Titles` normaliza recorrência desmarcada para campos nulos; mensal não usa mês.
 Com "Título recorrente" marcado, a inclusão desabilita **Parcelas** (fixa 1) e
 **Primeiro vencimento**, que passa a ser calculado no servidor por
@@ -880,6 +895,55 @@ classes `dark:` seguiam o tema do sistema operacional, e não a preferência do 
 
 ---
 
+### Personalização Individual Integrada
+
+A personalização do `lpro` foi consultada somente para leitura. A origem usa Laravel 10,
+Livewire 3 e DaisyUI 4 com configurações globais para master; neste projeto o usuário
+escolheu **personalização individual**, sem perfil administrativo nem dependências novas.
+
+- `BrandingPreferences`, em `/preferencias`, oferece nome (até 80 caracteres), exibição
+  do nome junto ao ícone, upload/remoção de ícone e dez cores opcionais.
+- `BrandingService::update()` valida campos, rejeita chaves de cor desconhecidas e grava
+  apenas o usuário autenticado sob transação/lock. `users.branding` tem cast `array` e
+  não é mass assignable; dados validados são gravados com `forceFill`.
+- O JSON contém `name`, `show_name`, `colors` e `icon_path`. Cores vazias usam o tema
+  original; `resetColors` limpa o formulário e precisa de salvar para persistir.
+- `themeColor` (`resources/js/theme-color.js`) lê as cores originais do CSS DaisyUI
+  no tema ativo, dentro de um escopo isolado de overrides do usuário. Canvas converte
+  OKLCH para hexadecimal sRGB aceito pelo seletor nativo. Na primeira abertura,
+  seletor e sugestão hexadecimal mostram a cor real, não um cinza fixo. Essa leitura
+  não preenche o estado persistido: salvar sem editar mantém `colors` vazio.
+  Restauração também mostra as cores originais, sem herdar overrides salvos.
+- PNG/JPG/WebP até 2 MB e 2048 × 2048 pixels; SVG não é aceito. Arquivos ficam no disco
+  privado `local`, em `branding/<user_id>/<nome-aleatorio>`. Não precisa de storage link.
+  Arquivo novo é removido se a gravação falhar; o antigo só é removido após commit.
+- `GET /personalizacao/icone` (`branding.icon`) exige autenticação, lê somente o
+  caminho persistido do próprio usuário e valida o prefixo/extensão. Resposta privada,
+  sem cache e com `nosniff`; nenhum ID de outro proprietário é aceito na URL.
+- `Branding::style()` usa as variáveis DaisyUI 5 `--color-*` (não as abreviações da v4),
+  com cores hexadecimais validadas. Texto dos botões recebe preto/branco pelo maior
+  contraste; fundo gera variantes base-200/300. Fundo e texto escolhidos pelo usuário
+  ainda exigem cuidado de contraste.
+- `<x-brand>` integra sidebar/cabeçalho. Nome e favicon são individuais; telas públicas
+  mantêm MoneyControl. Após salvar há redirect para aplicar a identidade.
+- O relatório HTML da dashboard usa o nome escolhido. PDFs de recibos e suas evidências
+  imutáveis não são reescritos; cores semânticas próprias dos gráficos são preservadas.
+
+Migration aditiva `2026_10_24_000001_add_branding_to_users_table`: JSON nulo em `users`,
+sem backfill nem valores financeiros alterados. Aplicada no MySQL da aplicação nesta
+entrega; o banco MySQL de testes ainda precisa recebê-la antes da próxima suíte MySQL.
+
+Validação: `BrandingPreferencesTest` e `WorkspaceTest`: **28 testes / 202 assertions**;
+regressão SQLite **373 testes / 1767 assertions**, incluindo reversão/reaplicação da
+migration apenas em SQLite em memória. Build, Pint, views e whitespace aprovados.
+Navegador: formulário, sincronização hexadecimal/seletor e restauração conferidos sem
+salvar preferências da conta existente. Upload e persistência foram verificados pelos
+testes automatizados; verificação visual em mobile permanece pendente.
+Correção da exibição inicial: **29 testes / 216 assertions** no focal
+`BrandingPreferencesTest|WorkspaceTest`, incluindo primeiro save sem editar cores
+nos temas claro/escuro. No navegador, confirmados cor inicial, edição e restauração,
+sem salvar alterações na conta existente. A regressão completa acima é da etapa anterior.
+
 ## 6. Módulo de Títulos — Regras de Negócio
 
 ### Estados de um título
@@ -1254,6 +1318,26 @@ formato esperado pelos Services e validações. Passe `model` com o caminho Live
 prévias enquanto a data é alterada; os demais campos mantêm sincronização diferida
 até a ação Livewire. `max` aceita uma data ISO. Datas de leitura devem ser formatadas
 como `d/m/Y`.
+
+**Limite do controle nativo:** `lang="pt-BR"` não força `dd/mm/yyyy` no Chromium
+configurado em `en-US`. Confirmado no navegador da validação: campos preservaram
+`type="date"`, calendário (`showPicker`) e valores ISO, mas mostraram mês/dia.
+Como o requisito proíbe substituir o componente, calendário ou estrutura, a garantia
+visual de dia/mês depende da localização do navegador/sistema, não de uma máscara.
+Configurar Português (Brasil) em Chrome/Edge > Configurações > Idiomas e o formato
+regional Português (Brasil) no sistema; reiniciar o navegador e conferir a ordem visual.
+Não interpretar manualmente `dd/mm/yyyy` como se fosse o valor do input nativo:
+o controle sempre transmite `yyyy-mm-dd`. Não inverter dia/mês no servidor.
+Validação manual de digitação/seleção em navegador realmente pt-BR permanece pendente.
+
+Validação da adequação pt-BR (26/10): **112 testes / 609 assertions** focais;
+**410 testes / 1948 assertions** na regressão completa SQLite. Casos `0,50`, `1,25`,
+`10,50`, `100,99`, `1.234,56`, `-10,50`, `0`, limites e precisão extra cobertos.
+Testadas criação/edição de contas, títulos, soma dos ajustes e formas, reenvio idempotente,
+datas ISO correspondentes a 01/01, 26/10 e 31/12/2026 e rejeição de datas inválidas.
+No navegador, digitado decimal com vírgula/milhar e preenchido campo nativo com ISO
+válido, sem gravar dados reais; seleção do calendário e digitação manual em pt-BR
+não foram confirmadas. Build, Pint e views aprovados; MySQL não reexecutado.
 
 Os KPIs (`.kpi-card`) são entradas, saídas, saldo líquido (verde/vermelho pelo sinal) e
 quantidade de eventos. O gráfico temporal mantém todos os dias do período, inclusive dias

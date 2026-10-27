@@ -4,16 +4,31 @@
 > **ORM:** Laravel Eloquent  
 > **Convenção de nomes:** tabelas e colunas em inglês (snake_case), domínio em português na camada de aplicação
 
-## Estado e Migrations (23/10/2026)
+## Estado e Migrations (26/10/2026)
 
-A estrutura abaixo está implementada nas 18 migrations (três de infraestrutura e quinze
-financeiras/perfil). Em 23/10/2026 todas estão aplicadas no MySQL local `gestao_financeira`;
+A estrutura abaixo está implementada nas 19 migrations (três de infraestrutura e dezesseis
+financeiras/perfil). Todas estão aplicadas no MySQL local `gestao_financeira`;
 o banco exclusivo `gestao_financeira_testing` não existia nesta máquina e precisa ser criado
 e migrado antes da suíte MySQL (ver `DEVELOPER_GUIDE.md`).
 Em 24/10/2026 o banco de testes foi encontrado existente, mas sem `deleted_at` nos três
 cadastros. A migration aditiva já existente de 23/10 foi aplicada exclusivamente em
 `gestao_financeira_testing`; nenhum reset, rollback de schema ou alteração de dados
 financeiros foi executado no banco da aplicação.
+
+**Migration `2026_10_24_000001_add_branding_to_users_table`:** adiciona JSON nulo
+`users.branding` para identidade individual (`name`, `show_name`, `colors`, `icon_path`).
+Sem backfill, nova tabela ou alteração financeira. Aplicada no banco da aplicação;
+ainda não aplicada nesta entrega ao MySQL de testes. Reversão remove preferências
+visuais, mas não apaga os arquivos de ícone; não reverter sem avaliar esses efeitos.
+Arquivos são privados no disco `local`; referências são escolhidas pelo Service,
+nunca recebidas como caminhos editáveis do navegador.
+
+**Adequação pt-BR (26/10):** apenas a fronteira dos formulários monetários foi alterada.
+Valores como `1500,75` e `1.234,56` são convertidos em strings `1500.75` / `1234.56`
+antes dos Services. `DECIMAL(15,2)`, dinheiro em centavos, datas `DATE`/ISO e consultas
+não mudam. Não houve migration nem execução de operações financeiras no banco da
+aplicação nesta adequação. O calendário nativo permanece com apresentação dependente
+do idioma/região do navegador.
 
 **Migration `2026_10_23_000001_add_soft_deletes_to_catalog_tables`:** adiciona `deleted_at`
 (TIMESTAMP nulo) a `categories`, `financial_accounts` e `payment_types`. É aditiva e não altera
@@ -38,7 +53,7 @@ correspondente; estornos são invertidos na própria data. Com filtros restritiv
 é saldo analítico. `FinancialAccountService::balance()` continua fornecendo saldo integral.
 Esta mudança e a revisão ortográfica não criam migration nem reescrevem registros.
 
-Validação: **368 testes / 1730 assertions em SQLite** (24/10/2026); focal de analytics MySQL:
+Validação: **410 testes / 1948 assertions em SQLite** (26/10/2026); focal histórico de analytics MySQL:
 **1 teste / 18 assertions** (24/10/2026). Última regressão completa MySQL:
 **158 testes / 1003 assertions** (antes da migration de 23/10/2026).
 No MySQL foram conferidas 21 tabelas com InnoDB e `utf8mb4_unicode_ci`, 22 FKs restritivas,
@@ -160,6 +175,7 @@ erDiagram
         string avatar
         string theme
         int notification_days_before
+        json branding
         timestamp email_verified_at
         timestamp created_at
         timestamp updated_at
@@ -381,6 +397,7 @@ erDiagram
 | `avatar` | VARCHAR(255) | Sim | NULL | Caminho da foto de perfil |
 | `theme` | ENUM | Não | `'dark'` | Tema persistido da interface: `dark` ou `light` |
 | `notification_days_before` | INT UNSIGNED | Não | `7` | Dias de antecedência para alertas de vencimento; tela valida 0 a 365 |
+| `branding` | JSON | Sim | NULL | Nome, exibição, cores e caminho privado do ícone; somente do proprietário |
 | `email_verified_at` | TIMESTAMP | Sim | NULL | Data de verificação do e-mail |
 | `remember_token` | VARCHAR(100) | Sim | NULL | Token de "lembrar-me" |
 | `created_at` | TIMESTAMP | Sim | NULL | Data de criação preenchida pelo Eloquent |

@@ -176,7 +176,7 @@
         <section class="financial-report mt-6" aria-label="Relatório financeiro">
             <header class="financial-report__header">
                 <div>
-                    <p class="financial-report__brand">MoneyControl</p>
+                    <p class="financial-report__brand">{{ \App\Support\Branding::name() }}</p>
                     <h1>Relatório financeiro</h1>
                     <p class="financial-report__subtitle">Visão consolidada de movimentações realizadas</p>
                 </div>
@@ -230,7 +230,7 @@
                 <div><span>Saldo líquido do período</span><strong>{{ \App\Support\Display::money(\App\Support\Money::signedDecimal($data['totals']['balance'])) }}</strong></div>
             </footer>
             <footer class="financial-report__footer">
-                <span>Relatório emitido pelo sistema <strong>MoneyControl</strong></span>
+                <span>Relatório emitido pelo sistema <strong>{{ \App\Support\Branding::name() }}</strong></span>
                 <span>Solicitado por <strong>{{ auth()->user()->name }}</strong> · {{ auth()->user()->email }}</span>
                 <span>Emissão: {{ now()->format('d/m/Y \à\s H:i') }}</span>
             </footer>

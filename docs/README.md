@@ -3,12 +3,13 @@
 > Sistema web de gestão financeira pessoal desenvolvido em **Laravel 12 + Livewire 3 + MaryUI + Tailwind CSS**.  
 > Projetado para uso web e futuro aplicativo mobile, com banco de dados unificado.
 
-## Estado da Implementação (24/10/2026)
+## Estado da Implementação (26/10/2026)
 
 **Fase 1 em andamento:** Laravel 12 inicializado, dependências PHP instaladas e estrutura
 financeira criada em 11 migrations (perfil + dez tabelas), mais migrations de idempotência e estorno.
-As 18 migrations, incluindo
-infraestrutura e a exclusão lógica de categorias/contas/formas (23/10/2026), estão aplicadas no MySQL local `gestao_financeira`. Os onze Models financeiros, relacionamentos,
+As 19 migrations, incluindo
+infraestrutura, exclusão lógica de categorias/contas/formas e personalização individual,
+estão aplicadas no MySQL local `gestao_financeira`. Os onze Models financeiros, relacionamentos,
 casts, soft deletes, escopo de proprietário e Policies estão implementados.
 `TitleService` implementa criação, parcelas, baixas parciais/totais, cancelamento e edição controlada;
 `RecurrenceService` calcula o próximo ciclo, criado atomicamente pelo `TitleService`.
@@ -21,7 +22,7 @@ reabre principal, invalida recibos existentes e trata próximos ciclos sem movim
 `ReceiptService` emite PDF privado com snapshot, hash e numeração global; download
 autorizado bloqueia estornos e arquivos inválidos. `NotificationService` gera alertas
 internos deduplicados por parcela/vencimento e permite marcar leitura ou atualização manual.
-Validação: **368 testes, 1730 assertions em SQLite** (24/10/2026); focal MySQL de analytics:
+Validação: **410 testes, 1948 assertions em SQLite** (26/10/2026); focal histórico MySQL de analytics:
 **1 teste, 18 assertions**, após aplicar a migration aditiva de 23/10 no banco de testes.
 A última regressão completa MySQL continua sendo **158 testes, 1003 assertions**, anterior
 a essa migration; a suíte completa ainda precisa ser reexecutada.
@@ -40,6 +41,19 @@ cancelar sem baixas ativas e emitir/verificar recibo PDF separadamente.
 UUIDs de baixa/estorno são mantidos para reenvio do mesmo pedido sem duplicação.
 Contatos completos, preferências persistentes, indicadores mensais iniciais do painel e
 dashboard financeira com filtros, gráficos e relatório imprimível também estão disponíveis.
+
+**Personalização individual:** em **Preferências > Personalização do sistema**, cada
+usuário pode definir nome, ícone, exibição do nome e dez cores, com restauração das cores
+originais do tema claro/escuro.
+Os seletores já mostram as cores do tema ativo na primeira abertura de uma conta nova;
+o hexadecimal original aparece como sugestão quando não há personalização.
+Salvar sem editar cores mantém o tema original.
+Adaptada do projeto local `lpro` sem modificar a origem nem instalar dependências:
+continua Laravel 12, Livewire 3, MaryUI, Tailwind 4 e DaisyUI 5.
+O ícone aceita PNG/JPG/WebP até 2 MB e 2048 × 2048 pixels, fica privado e serve também
+como favicon autenticado. Outros usuários e páginas públicas não são afetados.
+O relatório da dashboard usa o nome personalizado; recibos PDF existentes permanecem
+inalterados. A personalização não altera as cores semânticas financeiras dos gráficos.
 Notificações externas e importação/exportação
 continuam pendentes. Os módulos abaixo incluem o alvo completo, não apenas telas já entregues.
 Livewire 3.8.10 e MaryUI 2.9 estão em produção. Tailwind 4/daisyUI 5 substituem o alvo
@@ -375,7 +389,9 @@ php artisan serve
 
 Na página inicial, use **Criar minha conta** ou **Acessar**.
 Após entrar, `/painel` oferece navegação para receitas, despesas, dashboard financeira, contas, contatos,
-categorias, formas, recibos, notificações e preferências. Use valores com ponto decimal, sem milhar.
+categorias, formas, recibos, notificações e preferências. Nos formulários, use vírgula
+decimal: `1500,75`. O saldo inicial aceita negativos, como `-10,50`. A conversão para
+o formato interno com ponto ocorre antes dos Services, sem cálculos em float.
 Contatos podem ser arquivados e restaurados, sempre preservando vínculos financeiros.
 
 ### Dashboard Financeira e Relatório
@@ -416,6 +432,17 @@ Campos editáveis de data preservam o seletor de calendário nativo (`type="date
 solicitam o locale brasileiro com `lang="pt-BR"`. O valor continua sendo enviado como
 `yyyy-mm-dd` para manter as regras e validações existentes; a apresentação visual
 respeita a localização suportada pelo navegador.
+**Limitação confirmada:** Chromium em `en-US` ainda mostra mês/dia, apesar do `lang`.
+Para exibir/digitar `dd/mm/yyyy` com o mesmo calendário nativo, configure Português
+(Brasil) como idioma do navegador e formato regional brasileiro no sistema, reiniciando
+o navegador quando solicitado. Não há atributo HTML que force a ordem em todos os
+navegadores. A interface não substitui o calendário por campo de texto.
+
+Os formulários monetários exibem decimais com vírgula, inclusive edição, baixa, ajustes
+e valores sugeridos para novas formas. `1.234,56` digitado é interpretado como `1234.56`;
+nenhum separador de milhar é inserido automaticamente. Valores com mais de duas casas,
+negativos onde proibidos ou acima de `DECIMAL(15,2)` continuam sendo rejeitados, sem
+arredondamento. Listagens/relatórios já usam `Display::money()` em BRL.
 Na lista de receitas/despesas, abra a descrição do título. No detalhe, escolha
 **Registrar baixa**, informe principal, ajustes e formas/contas e confirme.
 As formas precisam somar principal - desconto + juros + multa. O PDF é emitido

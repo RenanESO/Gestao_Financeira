@@ -85,7 +85,7 @@
     @if($installmentId !== null)
         <section class="panel mb-6 scroll-mt-6" wire:key="payment-{{ $paymentKey }}" x-data x-init="$el.scrollIntoView({ behavior: 'smooth', block: 'start' })">
             <h2 class="text-lg font-semibold mb-2">Baixa da parcela {{ $title->installments->firstWhere('id', $installmentId)?->installment_number }}</h2>
-            <p class="muted mb-5">Valores com ponto decimal, sem milhar. Total = principal - desconto + juros + multa. As formas devem somar exatamente esse total.</p>
+            <p class="muted mb-5">Valores com vírgula decimal. Total = principal - desconto + juros + multa. As formas devem somar exatamente esse total.</p>
             @if($completedPayment)
                 <div role="status" class="mb-4 text-success">Pedido confirmado. Reenviar este mesmo pedido não cria outra baixa.</div>
                 <button class="btn btn-outline" wire:click="settle" wire:loading.attr="disabled">Reenviar mesmo pedido</button>

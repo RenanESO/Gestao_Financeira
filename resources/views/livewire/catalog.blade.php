@@ -80,7 +80,7 @@
                     <label class="field">Icone<input class="input w-full" wire:model="form.icon" maxlength="50" placeholder="o-building-library"></label>
                 @endif
                 @if($module === 'contas')
-                    <label class="field">Saldo inicial<input class="input w-full" type="text" inputmode="decimal" wire:model="form.initial_balance" required><span class="muted">Use ponto decimal, sem milhar: 1250.00 ou -50.00</span></label>
+                    <label class="field">Saldo inicial<input class="input w-full" type="text" inputmode="decimal" wire:model="form.initial_balance" required><span class="muted">Use vírgula decimal: 1250,00 ou -50,00.</span></label>
                 @endif
                 @if($module === 'contatos')
                     <label class="field">CPF / CNPJ<input class="input w-full" wire:model="form.document" maxlength="18"></label>
