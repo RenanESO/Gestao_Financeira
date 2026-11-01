@@ -1,8 +1,9 @@
 <div>
     <a class="link muted" href="{{ route($title->title_type === 'receivable' ? 'income' : 'expenses') }}">&larr; Voltar para {{ $title->title_type === 'receivable' ? 'receitas' : 'despesas' }}</a>
-    <div class="my-5 flex flex-wrap items-start justify-between gap-4">
+    <h1 class="page-title mt-2">{{ $title->title_type === 'receivable' ? 'Detalhes da receita' : 'Detalhes da despesa' }}</h1>
+    <div class="my-5 flex flex-wrap items-start justify-between gap-4">       
         @php $badge = \App\Support\Display::statusBadge($title->status); @endphp
-        <div><h1 class="page-title">{{ $title->description }}</h1><p class="muted mt-3 flex flex-wrap items-center gap-2">{{ $title->title_number }} <span class="status-badge swipe-tone--{{ $badge['tone'] }}"><x-mary-icon :name="$badge['icon']" aria-hidden="true" />{{ \App\Support\Display::status($title->status) }}</span></p></div>
+        <div><p class="mt-2 text-2xl font-semibold">{{ $title->description }}</p><p class="muted mt-3 flex flex-wrap items-center gap-2">{{ $title->title_number }} <span class="status-badge swipe-tone--{{ $badge['tone'] }}"><x-mary-icon :name="$badge['icon']" aria-hidden="true" />{{ \App\Support\Display::status($title->status) }}</span></p></div>
         @if($title->status !== 'cancelled')
             <div class="flex gap-2">
                 <button class="btn btn-outline btn-sm" wire:click="openEdit" wire:loading.attr="disabled"><x-mary-icon name="o-pencil-square" class="size-4" aria-hidden="true" />Editar título</button>
